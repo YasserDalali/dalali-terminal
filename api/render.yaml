@@ -1,0 +1,19 @@
+# Render Blueprint — deploy the API as a Web Service.
+# Dashboard: New → Blueprint → connect repo; set root to this file or use "Root Directory" = repo root.
+# https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: dalali-api
+    runtime: node
+    region: frankfurt # change if you prefer
+    plan: free
+    rootDir: api
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # Set these in the Render dashboard (secret) — do not commit real values:
+      # IBKR_FLEX_TOKEN, IBKR_FLEX_QUERY_ID, REDIS_URL
+      # Optional: DATABASE_URL (budget cloud), PORTFOLIO_POLL_MS, PORTFOLIO_REDIS_KEY, IBKR_FLEX_DIRECT_BASE

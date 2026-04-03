@@ -6,10 +6,10 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores(['dist', 'api/dist', 'api/node_modules']),
   {
     files: ['**/*.{ts,tsx}'],
-    ignores: ['server/**'],
+    ignores: ['api/**'],
     extends: [
       js.configs.recommended,
       tseslint.configs.recommended,
@@ -22,7 +22,7 @@ export default defineConfig([
     },
   },
   {
-    files: ['server/**/*.ts'],
+    files: ['api/**/*.ts'],
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     languageOptions: {
       ecmaVersion: 2020,

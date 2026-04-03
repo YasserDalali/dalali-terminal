@@ -1,0 +1,31 @@
+{
+  "name": "dalali-api",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "redis:ping": "tsx scripts/redis-ping.mts"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "fast-xml-parser": "^5.5.10",
+    "pg": "^8.20.0",
+    "redis": "^4.7.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^24.12.0",
+    "@types/pg": "^8.20.0",
+    "tsx": "^4.19.3",
+    "typescript": "~5.9.3"
+  }
+}

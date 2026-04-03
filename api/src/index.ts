@@ -1,23 +1,31 @@
 /**
  * Portfolio cache API: polls IBKR Flex, stores JSON in Redis, serves GET /api/portfolio.
- * Run: npx tsx server/index.ts  (or docker compose)
+ * Deploy: Render (see api/README.md). Local: npm run dev
  */
-import 'dotenv/config'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import dotenv from 'dotenv'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+// Repo root .env (local monorepo), then api/.env overrides — same DX as before `server/` moved.
+dotenv.config({ path: path.resolve(__dirname, '../../.env') })
+dotenv.config({ path: path.resolve(__dirname, '../.env') })
+
 import cors from 'cors'
 import express from 'express'
 import { createClient } from 'redis'
-import type { IbkrFlexPortfolio } from '../src/services/finance/ibkrFlexTypes.ts'
+import type { IbkrFlexPortfolio } from './lib/ibkrFlexTypes.js'
 import {
   IBKR_FLEX_WEB_SERVICE_DEFAULT_BASE,
   loadIbkrFlexPortfolio,
-} from '../src/services/finance/ibkrFlexService.ts'
+} from './lib/ibkrFlexService.js'
 import {
   ensureBudgetTable,
   isBudgetDbConfigured,
   pingBudgetDb,
   readBudgetPayload,
   writeBudgetPayload,
-} from './budgetPg.ts'
+} from './budgetPg.js'
 
 const REDIS_KEY = process.env.PORTFOLIO_REDIS_KEY ?? 'dalali:portfolio:payload'
 const PORT = Number(process.env.PORT ?? process.env.PORTFOLIO_API_PORT ?? 8787)
@@ -232,8 +240,8 @@ async function main(): Promise<void> {
   }
   await refreshLocked()
   startPoller()
-  app.listen(PORT, () => {
-    console.log(`[portfolio-api] http://0.0.0.0:${PORT}`)
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`[portfolio-api] listening on 0.0.0.0:${PORT}`)
   })
 }
 

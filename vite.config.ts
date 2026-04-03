@@ -20,7 +20,7 @@ export default defineConfig(({ mode }) => {
         '/api': {
           target: 'http://127.0.0.1:8787',
           changeOrigin: true,
-        },
+        }, // dalali-api: npm run server:dev (api/)
         // IB Flex Web Service — modern path (see IBKR Flex Web Service docs / AccountManagement/FlexWebService)
         '/ibkr-flex': {
           target: 'https://ndcdyn.interactivebrokers.com',

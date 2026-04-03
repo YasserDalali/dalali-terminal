@@ -1,5 +1,11 @@
-import 'dotenv/config'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import dotenv from 'dotenv'
 import { createClient } from 'redis'
+
+const d = path.dirname(fileURLToPath(import.meta.url))
+dotenv.config({ path: path.resolve(d, '../../.env') })
+dotenv.config({ path: path.resolve(d, '../.env') })
 
 void (async () => {
   const url = process.env.REDIS_URL
