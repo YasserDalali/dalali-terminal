@@ -1,0 +1,234 @@
+/* Bloomberg-inspired intro: amber terminal pulse with modern motion */
+
+.splash {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  animation: splash-root-in 0.24s linear both;
+}
+
+.splash--out {
+  animation: splash-root-out 0.42s linear forwards;
+}
+
+@keyframes splash-root-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes splash-root-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
+.splash__vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 74% 56% at 50% 48%, rgba(255, 102, 0, 0.1) 0%, rgba(255, 102, 0, 0.03) 38%, rgba(0, 0, 0, 0.95) 70%),
+    radial-gradient(ellipse 120% 90% at 50% 20%, rgba(255, 204, 0, 0.05) 0%, rgba(0, 0, 0, 0.95) 62%);
+  opacity: 1;
+}
+
+.splash__grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.14;
+  background-image:
+    linear-gradient(0deg, transparent 24px, #171717 25px),
+    linear-gradient(90deg, transparent 24px, #151515 25px);
+  background-size: 100% 25px, 25px 100%;
+}
+
+.splash__scanline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 42px;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(255, 204, 0, 0), rgba(255, 204, 0, 0.14), rgba(255, 204, 0, 0));
+  mix-blend-mode: screen;
+  animation: splash-scan 1.8s linear infinite;
+  opacity: 0.5;
+}
+
+@keyframes splash-scan {
+  from {
+    top: -52px;
+  }
+  to {
+    top: calc(100% + 52px);
+  }
+}
+
+.splash__content {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  padding: 24px;
+}
+
+.splash__wordmark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(4px, 1.2vw, 10px);
+  margin-bottom: clamp(10px, 2.2vw, 18px);
+}
+
+.splash__char-wrap {
+  --i: 0;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: clamp(36px, 8vw, 56px);
+  height: clamp(46px, 11vw, 74px);
+  animation: splash-char-pop 0.38s cubic-bezier(0.2, 0.85, 0.3, 1) both;
+  animation-delay: calc(0.04s + var(--i) * 0.055s);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .splash__char-wrap {
+    animation: none;
+    opacity: 1;
+  }
+
+  .splash__bar {
+    animation: none;
+    transform: scaleY(1);
+  }
+
+  .splash__letter {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  .splash__subtitle {
+    animation: none;
+    opacity: 1;
+  }
+
+  .splash__scanline {
+    animation: none;
+    opacity: 0.2;
+  }
+
+  .splash {
+    animation: none;
+    opacity: 1;
+  }
+
+  .splash--out {
+    animation: splash-root-out 0.3s ease-in forwards;
+  }
+}
+
+.splash__bar {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 22%;
+  min-width: 4px;
+  max-width: 10px;
+  height: 100%;
+  margin-left: -9%;
+  background: linear-gradient(180deg, #cc5200 0%, #ff6600 45%, #ffcc00 100%);
+  border-radius: 1px;
+  transform: translate(-50%, -50%) scaleY(0);
+  transform-origin: center bottom;
+  animation: splash-bar-rise 0.36s cubic-bezier(0.3, 1.35, 0.58, 1) both;
+  animation-delay: calc(var(--i) * 0.055s);
+  box-shadow:
+    0 0 16px rgba(255, 102, 0, 0.6),
+    0 0 40px rgba(255, 102, 0, 0.2);
+}
+
+.splash__letter {
+  position: relative;
+  z-index: 1;
+  font-family: Consolas, 'Lucida Console', 'Courier New', monospace;
+  font-weight: 800;
+  font-size: clamp(1.85rem, 6.6vw, 3.8rem);
+  letter-spacing: 0.02em;
+  color: #ffff00;
+  text-shadow:
+    0 0 22px rgba(255, 204, 0, 0.45),
+    0 0 2px rgba(255, 255, 255, 0.35);
+  opacity: 0;
+  transform: translateY(8px) scale(0.92);
+  animation: splash-letter-in 0.34s cubic-bezier(0.2, 0.95, 0.25, 1) both;
+  animation-delay: calc(0.14s + var(--i) * 0.055s);
+}
+
+@keyframes splash-bar-rise {
+  from {
+    transform: translate(-50%, -50%) scaleY(0);
+  }
+  to {
+    transform: translate(-50%, -50%) scaleY(1);
+  }
+}
+
+@keyframes splash-letter-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes splash-char-pop {
+  from {
+    filter: blur(4px);
+  }
+  to {
+    filter: blur(0);
+  }
+}
+
+.splash__subtitle {
+  margin: 0 auto;
+  max-width: 36em;
+  font-family: Consolas, 'Lucida Console', 'Courier New', monospace;
+  font-size: clamp(0.7rem, 1.9vw, 0.92rem);
+  font-weight: 600;
+  line-height: 1.45;
+  color: rgba(255, 204, 0, 0.84);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0;
+  transform: translateY(7px);
+  animation: splash-sub-in 0.34s linear both;
+  animation-delay: 0.56s;
+}
+
+@keyframes splash-sub-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

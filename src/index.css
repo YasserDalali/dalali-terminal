@@ -1,0 +1,44 @@
+/* Bloomberg Terminal–style base: bitmap-dense, no rounded UI chrome */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  font-family: Consolas, 'Lucida Console', 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.25;
+  background: #000;
+  color: #fff;
+  -webkit-font-smoothing: none;
+  text-rendering: optimizeSpeed;
+}
+
+#root {
+  height: 100%;
+}
+
+.mono {
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.muted {
+  color: #888;
+}
+
+.pos {
+  color: #0f0;
+}
+
+.neg {
+  color: #f33;
+}
