@@ -14,7 +14,8 @@ import {
   type BudgetSnapshotV1,
   type BudgetStrategyId,
 } from '../../../services/budgetPersist'
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, RadialBarChart, RadialBar } from 'recharts'
+import { ResponsiveContainer, RadialBarChart, RadialBar, Tooltip } from 'recharts'
+import { CategoricalHistogram } from '../../charts/lightweight/CategoricalHistogram'
 
 function parseMoney(s: string) {
   const v = Number(s)
@@ -683,14 +684,7 @@ export function BudgetPage() {
                 <div className="bb-fin-chartCard">
                   <div className="bb-fin-chartCard__ttl">smoothing chart</div>
                   <div className="bb-fin-miniChart">
-                    <ResponsiveContainer width="100%" height={110}>
-                      <BarChart data={smoothingBars}>
-                        <XAxis dataKey="name" stroke="#888" tick={{ fill: '#aaa', fontSize: 10 }} />
-                        <YAxis stroke="#555" tick={{ fill: '#777', fontSize: 10 }} />
-                        <Tooltip formatter={(v) => formatMoney(Number(v ?? 0))} />
-                        <Bar dataKey="value" fill="#ffcc00" />
-                      </BarChart>
-                    </ResponsiveContainer>
+                    <CategoricalHistogram bars={smoothingBars} barColor="#ffcc00" baseYmd="2021-06-01" height={110} />
                   </div>
                 </div>
               </article>
@@ -792,14 +786,7 @@ export function BudgetPage() {
                 <div className="bb-fin-chartCard">
                   <div className="bb-fin-chartCard__ttl">contributions tracking</div>
                   <div className="bb-fin-miniChart">
-                    <ResponsiveContainer width="100%" height={112}>
-                      <BarChart data={contributionBars}>
-                        <XAxis dataKey="name" stroke="#888" tick={{ fill: '#aaa', fontSize: 10 }} />
-                        <YAxis stroke="#555" tick={{ fill: '#777', fontSize: 10 }} />
-                        <Tooltip formatter={(v) => formatMoney(Number(v ?? 0))} />
-                        <Bar dataKey="value" fill="#ff6600" />
-                      </BarChart>
-                    </ResponsiveContainer>
+                    <CategoricalHistogram bars={contributionBars} barColor="#ff6600" baseYmd="2022-03-01" height={112} />
                   </div>
                 </div>
               </article>

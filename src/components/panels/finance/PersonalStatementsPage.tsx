@@ -8,10 +8,7 @@ import {
   type PersonalStatementsInput,
   type StatementItem,
 } from '../../../services/storage/personalStatementsStore'
-
-function formatUsd(n: number) {
-  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
+import { formatUsd } from '../../../utils/formatMoney'
 
 function parseMoney(s: string) {
   const raw = s.replace(/,/g, '').trim()

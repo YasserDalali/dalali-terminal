@@ -7,7 +7,8 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { normalizeEquitySymbol, type EquityDetailModel } from '../../data/mockEquity'
+import { normalizeEquitySymbol } from '../../data/equitySymbol'
+import type { EquityDetailModel } from '../../data/mockEquity'
 import {
   DEFAULT_EQUITY_SYMBOL,
   DEFAULT_WATCHLIST,
@@ -17,6 +18,10 @@ import {
 import { buildEquityDetail, sliceClosesForRange, type EquityChartRange } from './marketEquityModel'
 import { fetchStooqOhlcv, type StooqOhlcvBar } from './stooqDaily'
 import { tickerToStooq } from './stooqDaily'
+import { formatUsd } from '../../utils/formatMoney'
+
+/** Auto-refresh interval for market series (must match countdown in status bar). */
+export const MARKET_DATA_REFRESH_INTERVAL_MS = 120_000
 
 function formatYmd(d: Date): string {
   const y = d.getFullYear()
@@ -29,10 +34,6 @@ function addCalendarDays(d: Date, days: number): Date {
   const x = new Date(d)
   x.setDate(x.getDate() + days)
   return x
-}
-
-function fmtPrice(n: number): string {
-  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 function lastTwoCloses(bars: StooqOhlcvBar[]): { prev: number; last: number } | null {
@@ -108,7 +109,7 @@ function buildIndices(series: Record<string, StooqOhlcvBar[]>): IndexStripRow[] 
     return {
       id: cfg.id,
       label: cfg.label,
-      price: fmtPrice(t.last),
+      price: formatUsd(t.last),
       delta: `${change >= 0 ? '+' : ''}${change.toFixed(2)}`,
       pct: `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`,
       up: change >= 0,
@@ -139,7 +140,7 @@ function buildWatchlist(series: Record<string, StooqOhlcvBar[]>): WatchlistRow[]
     return {
       sym: cfg.sym,
       name: cfg.name,
-      price: fmtPrice(t.last),
+      price: formatUsd(t.last),
       d1: `${d1pct >= 0 ? '+' : ''}${d1pct.toFixed(2)}%`,
       m1: `${m1pct >= 0 ? '+' : ''}${m1pct.toFixed(1)}%`,
       cap: cfg.capHint ?? '—',
@@ -210,7 +211,7 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
   }, [load])
 
   useEffect(() => {
-    const t = window.setInterval(() => void load(), 120_000)
+    const t = window.setInterval(() => void load(), MARKET_DATA_REFRESH_INTERVAL_MS)
     return () => window.clearInterval(t)
   }, [load])
 

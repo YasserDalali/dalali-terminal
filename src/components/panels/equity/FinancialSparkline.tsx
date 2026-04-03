@@ -1,15 +1,14 @@
-import { LineChart, Line, XAxis, YAxis } from 'recharts'
+import { createChart, LineSeries, LineStyle } from 'lightweight-charts'
+import { useEffect, useRef } from 'react'
+import { lcLastPriceOff, sparklineChartOptions } from '../../charts/lightweight/terminalLightweightTheme'
+import { syntheticBusinessDaySeries } from '../../charts/lightweight/timeFormat'
 
 function parseY(v: string | null | undefined): number | null {
   if (v == null) return null
   const s = v.trim()
   if (!s || s === '—' || s === '-') return null
-
-  // Strip units like B/T/M and symbols like %.
-  // Keep digits, sign, dot, and exponent characters.
   const m = s.match(/-?\d*\.?\d+(?:[eE][+-]?\d+)?/)
   if (!m) return null
-
   const n = Number(m[0])
   return Number.isFinite(n) ? n : null
 }
@@ -19,66 +18,65 @@ export function FinancialSparkline(props: {
   estimateFromIndex: number | null
 }) {
   const { values, estimateFromIndex } = props
+  const wrapRef = useRef<HTMLDivElement>(null)
 
-  const chartData = values.map((v, i) => {
-    const y = parseY(v)
-    return {
-      x: i,
-      y,
-      ySolid: y != null && (estimateFromIndex == null || i < estimateFromIndex) ? y : null,
-      yEst: y != null && estimateFromIndex != null && i >= estimateFromIndex ? y : null,
+  useEffect(() => {
+    const el = wrapRef.current
+    if (!el) return
+
+    const ys = values.map((v) => parseY(v ?? null))
+    const finite = ys.filter((v): v is number => v != null)
+    if (finite.length < 2) return
+
+    const times = syntheticBusinessDaySeries(values.length)
+    const first = ys.find((v) => v != null)
+    const last = [...ys].reverse().find((v) => v != null)
+    const isUp = first != null && last != null ? last >= first : true
+    const mainColor = isUp ? '#0f0' : '#f44'
+
+    const chart = createChart(el, { ...sparklineChartOptions(), autoSize: true })
+    const solid = chart.addSeries(LineSeries, {
+      color: mainColor,
+      lineWidth: 2,
+      lineStyle: LineStyle.Solid,
+      ...lcLastPriceOff,
+    })
+    const est = chart.addSeries(LineSeries, {
+      color: '#ffcc00',
+      lineWidth: 2,
+      lineStyle: LineStyle.Dashed,
+      ...lcLastPriceOff,
+    })
+
+    const split = estimateFromIndex ?? values.length
+    solid.setData(
+      times
+        .map((time, i) => ({ time, value: i < split ? ys[i]! : undefined }))
+        .filter((d): d is { time: string; value: number } => d.value != null),
+    )
+    if (estimateFromIndex != null && estimateFromIndex < values.length) {
+      est.setData(
+        times
+          .map((time, i) => ({ time, value: i >= split ? ys[i]! : undefined }))
+          .filter((d): d is { time: string; value: number } => d.value != null),
+      )
+    } else {
+      est.setData([])
     }
-  })
 
-  const ys = chartData.map((d) => d.y).filter((v): v is number => v != null)
-  const hasEnough = ys.length >= 2
+    chart.timeScale().fitContent()
 
-  // Keep the scale stable for small sparklines.
-  const min = hasEnough ? Math.min(...ys) : 0
-  const max = hasEnough ? Math.max(...ys) : 1
-  const span = max - min
-  const pad = span === 0 ? 1 : span * 0.12
-  const yDomain = [min - pad, max + pad] as const
+    return () => {
+      chart.remove()
+    }
+  }, [estimateFromIndex, values])
 
-  const first = chartData.find((d) => d.y != null)?.y
-  const last = [...chartData].reverse().find((d) => d.y != null)?.y
-  const isUp = first != null && last != null ? last >= first : true
+  const ys = values.map((v) => parseY(v ?? null))
+  const hasEnough = ys.filter((v) => v != null).length >= 2
 
   return (
     <div className="bb-eq-fin__spark" aria-hidden="true">
-      {hasEnough ? (
-        <LineChart
-          width={150}
-          height={22}
-          data={chartData}
-          margin={{ top: 2, right: 0, bottom: 2, left: 0 }}
-        >
-          <XAxis dataKey="x" hide />
-          <YAxis domain={yDomain} hide />
-          <Line
-            type="monotone"
-            dataKey="ySolid"
-            stroke={isUp ? '#0f0' : '#f44'}
-            strokeWidth={1.5}
-            dot={false}
-            isAnimationActive={false}
-            connectNulls={false}
-          />
-          {estimateFromIndex != null ? (
-            <Line
-              type="monotone"
-              dataKey="yEst"
-              stroke="#ffcc00"
-              strokeWidth={1.5}
-              strokeDasharray="3 3"
-              dot={false}
-              isAnimationActive={false}
-              connectNulls={false}
-            />
-          ) : null}
-        </LineChart>
-      ) : null}
+      {hasEnough ? <div ref={wrapRef} style={{ width: 150, height: 22 }} /> : null}
     </div>
   )
 }
-

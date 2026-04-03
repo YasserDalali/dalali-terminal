@@ -5,14 +5,9 @@ interface ModulePlaceholderProps {
   moduleId: ModuleId
 }
 
+/** Only modules that fall through to this placeholder (see App routing). */
 const BLURBS: Partial<Record<ModuleId, string>> = {
-  equity:
-    'Security description, tabs, pricing, financials, holders — wire to equity function pages.',
-  portfolio: 'Positions, P&L, allocation, performance — wire to portfolio analytics.',
   risk: 'Beta, VaR, stress, correlation — wire to risk function.',
-  budget: 'Ledger, planner, burn — wire to budget function.',
-  finance: 'Net worth, statements — wire to personal finance function.',
-  advisor: 'Use HELP (F1) for chat overlay.',
 }
 
 export function ModulePlaceholder({ moduleId }: ModulePlaceholderProps) {

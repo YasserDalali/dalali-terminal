@@ -5,11 +5,8 @@ import {
   MOCK_ANALYST_RATINGS,
   MOCK_RESEARCH_REPORTS,
 } from '../../../data/equityTabMocks'
+import { formatUsd } from '../../../utils/formatMoney'
 import { InlineBold } from './InlineBold'
-
-function formatUsd(n: number) {
-  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
 
 export function EquityAnalysisTab() {
   const q = MOCK_EQUITY

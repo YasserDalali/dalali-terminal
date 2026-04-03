@@ -1,8 +1,4 @@
-/** Normalize ticker for URLs and lookups (uppercase A–Z, 0–9, dot, hyphen). */
-export function normalizeEquitySymbol(raw: string): string {
-  const s = raw.replace(/[^A-Za-z0-9.-]/g, '').toUpperCase()
-  return s || 'MSFT'
-}
+import { EQUITY_CHART_RANGES } from './equityChartRanges'
 
 /** Mock security — replace with API (e.g. FMP / Yahoo). */
 export const MOCK_EQUITY = {
@@ -15,7 +11,7 @@ export const MOCK_EQUITY = {
   changePct: 0.69,
   afterHours: { price: 414.1, change: -1.12, changePct: -0.27, time: '19:59 ET' },
   currency: 'USD',
-  ranges: ['1D', '5D', '1M', '6M', 'YTD', '1Y', '5Y', 'MAX'] as const,
+  ranges: EQUITY_CHART_RANGES,
   stats: [
     { label: 'PREV CLOSE', value: '412.38' },
     { label: 'MKT CAP', value: '3.09T' },
@@ -65,15 +61,3 @@ export const MOCK_EQUITY = {
 }
 
 export type EquityDetailModel = typeof MOCK_EQUITY
-
-export const EQUITY_TABS = [
-  'Overview',
-  'Financials',
-  'Earnings',
-  'Holders',
-  'Historical',
-  'Analysis',
-  'Relations',
-] as const
-
-export type EquityTab = (typeof EQUITY_TABS)[number]

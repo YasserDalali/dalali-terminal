@@ -1,8 +1,9 @@
+import type { EquityChartRange } from '../../data/equityChartRanges'
 import { MOCK_EQUITY, type EquityDetailModel } from '../../data/mockEquity'
 import { EQUITY_LISTING } from './marketConfig'
 import type { StooqOhlcvBar } from './stooqDaily'
 
-export type EquityChartRange = EquityDetailModel['ranges'][number]
+export type { EquityChartRange }
 
 function formatVol(n: number): string {
   if (!Number.isFinite(n) || n <= 0) return '—'

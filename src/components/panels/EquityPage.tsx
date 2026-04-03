@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
-import { EQUITY_TABS, type EquityTab } from '../../data/mockEquity'
+import { EQUITY_TABS, type EquityTab } from '../../data/equityTabs'
 import { EquityLink } from '../EquityLink'
 import { useMarketData } from '../../services/market/marketDataStore'
+import { formatUsd } from '../../utils/formatMoney'
 import { EquityAnalysisTab } from './equity/EquityAnalysisTab'
 import { EquityEarningsTab } from './equity/EquityEarningsTab'
 import { EquityFinancialsTab } from './equity/EquityFinancialsTab'
@@ -10,10 +11,6 @@ import { EquityHoldersTab } from './equity/EquityHoldersTab'
 import { EquityRelationsTab } from './equity/EquityRelationsTab'
 import { InlineBold } from './equity/InlineBold'
 import { EquityPriceChart } from '../charts/EquityPriceChart'
-
-function formatUsd(n: number) {
-  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
 
 export function EquityPage() {
   const { equityDetail: q, equityChartCloses } = useMarketData()
@@ -60,10 +57,10 @@ export function EquityPage() {
           </div>
         </div>
         <div className="bb-eq-head__acts">
-          <button type="button" className="bb-eq-btn">
+          <button type="button" className="bb-eq-btn" disabled title="Not implemented">
             FOLLOW
           </button>
-          <button type="button" className="bb-eq-btn bb-eq-btn--pri">
+          <button type="button" className="bb-eq-btn bb-eq-btn--pri" disabled title="Not implemented">
             PRICE ALERT
           </button>
         </div>
@@ -114,7 +111,7 @@ export function EquityPage() {
                   </button>
                 ))}
                 <span className="bb-eq-range__fill" />
-                <button type="button" className="bb-eq-iconbtn" title="Compare">
+                <button type="button" className="bb-eq-iconbtn" disabled title="Not implemented">
                   CMP
                 </button>
               </div>
@@ -134,7 +131,11 @@ export function EquityPage() {
                   {Number.isFinite(prevClose) ? prevClose.toFixed(2) : q.price - q.change} PREV CLOSE
                 </div>
               </div>
-              <div className="bb-eq-vol" aria-hidden>
+              <div
+                className="bb-eq-vol"
+                aria-hidden
+                title="Decorative bars only — volume from feed not shown here"
+              >
                 <span className="bb-eq-vol__lbl">VOL</span>
                 <div className="bb-eq-vol__bars">
                   {Array.from({ length: 40 }).map((_, i) => (
@@ -217,7 +218,7 @@ export function EquityPage() {
                 <dd>{q.exchange}</dd>
               </dl>
               <p className="bb-eq-desc">{q.company.description}</p>
-              <button type="button" className="bb-eq-more">
+              <button type="button" className="bb-eq-more" disabled title="Not implemented">
                 VIEW MORE ▾
               </button>
             </section>
@@ -304,6 +305,9 @@ export function EquityPage() {
         </div>
       ) : (
         <div className="bb-eq-tabwrap">
+          <p className="mono muted" style={{ margin: '0 0 0.75rem', fontSize: '0.8rem' }}>
+            Demo / mock data for this tab — not tied to the selected ticker or a live API.
+          </p>
           {tab === 'Financials' && <EquityFinancialsTab />}
           {tab === 'Earnings' && <EquityEarningsTab />}
           {tab === 'Holders' && <EquityHoldersTab />}

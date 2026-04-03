@@ -5,12 +5,13 @@ import { NAV_MODULES } from '../data/modules'
 interface TopBarProps {
   activeModule: ModuleId
   onModuleChange: (id: ModuleId) => void
-  ibkrConnected: boolean
+  /** True when Stooq market data loaded successfully (see status bar). */
+  feedOk: boolean
 }
 
 const MAIN_MENU = ['DESKTOP', 'GROUPS', 'MESSAGES', 'IB', 'WORKFLOW', 'HELP'] as const
 
-export function TopBar({ activeModule, onModuleChange, ibkrConnected }: TopBarProps) {
+export function TopBar({ activeModule, onModuleChange, feedOk }: TopBarProps) {
   return (
     <>
       <div className="bb-menubar">
@@ -21,17 +22,22 @@ export function TopBar({ activeModule, onModuleChange, ibkrConnected }: TopBarPr
           {MAIN_MENU.map((item, i) => (
             <span key={item} className="bb-menubar__cluster">
               {i > 0 ? <span className="bb-menubar__pipe" aria-hidden /> : null}
-              <button type="button" className="bb-menubar__item">
+              <button type="button" className="bb-menubar__item" disabled title="Not implemented">
                 {item}
               </button>
             </span>
           ))}
         </nav>
         <div className="bb-menubar__right">
-          <span className={`bb-led${ibkrConnected ? ' bb-led--on' : ''}`} title="Data feed" />
-          <span className="bb-menubar__meta">IBKR</span>
+          <span
+            className={`bb-led${feedOk ? ' bb-led--on' : ''}`}
+            title={feedOk ? 'Market data refreshed (Stooq)' : 'Market data unavailable or loading'}
+          />
+          <span className="bb-menubar__meta">STOOQ</span>
           <span className="bb-menubar__pipe" aria-hidden />
-          <span className="bb-menubar__meta bb-menubar__meta--user">USER</span>
+          <span className="bb-menubar__meta bb-menubar__meta--user" title="Not signed in">
+            LOCAL
+          </span>
         </div>
       </div>
 

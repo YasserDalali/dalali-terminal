@@ -1,12 +1,15 @@
-import { Area, AreaChart, ReferenceLine, ResponsiveContainer, XAxis, YAxis } from 'recharts'
-import { useId, useMemo } from 'react'
+import {
+  AreaSeries,
+  ColorType,
+  createChart,
+  createTextWatermark,
+  LineStyle,
+} from 'lightweight-charts'
+import { useEffect, useRef } from 'react'
+import { lcLastPriceOff, terminalChartOptions } from './lightweight/terminalLightweightTheme'
+import { syntheticBusinessDaySeries } from './lightweight/timeFormat'
 
-function buildSeries(params: {
-  n: number
-  start: number
-  end: number
-  seed: number
-}) {
+function buildSeries(params: { n: number; start: number; end: number; seed: number }) {
   const { n, start, end, seed } = params
   if (n <= 1) return [{ x: 0, y: end }]
 
@@ -21,7 +24,6 @@ function buildSeries(params: {
     const y = start + trend + wobble * amp
     arr.push({ x: i, y })
   }
-  // Ensure endpoints match.
   arr[0] = { x: 0, y: start }
   arr[arr.length - 1] = { x: n - 1, y: end }
   return arr
@@ -37,49 +39,79 @@ export function EquityPriceChart(props: {
   closes?: number[]
 }) {
   const { prevClose, price, up, seed, points = 24, closes } = props
-  const id = useId()
-  const data = useMemo(() => {
-    if (closes && closes.length >= 2) {
-      return closes.map((y, x) => ({ x, y }))
+  const wrapRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const el = wrapRef.current
+    if (!el) return
+
+    const seriesPoints =
+      closes && closes.length >= 2
+        ? closes.map((y, x) => ({ x, y }))
+        : buildSeries({ n: points, start: prevClose, end: price, seed })
+
+    const stroke = up ? '#0f0' : '#f44'
+    const topColor = up ? 'rgba(16, 255, 16, 0.28)' : 'rgba(255, 68, 68, 0.28)'
+
+    const chart = createChart(
+      el,
+      terminalChartOptions({
+        autoSize: true,
+        layout: {
+          background: { type: ColorType.Solid, color: '#050505' },
+        },
+        localization: {
+          priceFormatter: (p: number) => (Number.isFinite(p) ? p.toFixed(2) : ''),
+        },
+        crosshair: {
+          horzLine: { labelVisible: true },
+          vertLine: { labelVisible: true },
+        },
+      }),
+    )
+
+    const pane = chart.panes()[0]
+    if (pane) {
+      createTextWatermark(pane, {
+        horzAlign: 'center',
+        vertAlign: 'center',
+        lines: [{ text: 'DALALI', color: 'rgba(60,60,60,0.12)', fontSize: 56, fontStyle: '' }],
+      })
     }
-    return buildSeries({ n: points, start: prevClose, end: price, seed })
-  }, [closes, points, prevClose, price, seed])
-  const ys = data.map((d) => d.y)
-  const min = Math.min(...ys)
-  const max = Math.max(...ys)
-  const span = max - min || 1
-  const pad = span * 0.12
-  const domain: [number, number] = [min - pad, max + pad]
 
-  const fillFrom = up ? '#0a3d0a' : '#3d0a0a'
-  const stroke = up ? '#0f0' : '#f44'
+    const area = chart.addSeries(AreaSeries, {
+      lineColor: stroke,
+      topColor,
+      bottomColor: 'rgba(0,0,0,0)',
+      lineWidth: 2,
+      lineStyle: LineStyle.Solid,
+      ...lcLastPriceOff,
+      priceFormat: { type: 'price', minMove: 0.01, precision: 2 },
+    })
 
-  return (
-    <div className="bb-eq-chart__chart" aria-hidden="true">
-      <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data} margin={{ top: 2, right: 8, bottom: 2, left: 8 }}>
-          <defs>
-            <linearGradient id={`eqFill-${id}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={fillFrom} stopOpacity="0.9" />
-              <stop offset="100%" stopColor="#000" stopOpacity="0" />
-            </linearGradient>
-          </defs>
-          <XAxis dataKey="x" hide />
-          <YAxis domain={domain} hide />
-          <ReferenceLine y={prevClose} stroke="#555" strokeDasharray="4 3" />
-          <Area
-            type="monotone"
-            dataKey="y"
-            stroke={stroke}
-            strokeWidth={1.5}
-            fill={`url(#eqFill-${id})`}
-            fillOpacity={1}
-            isAnimationActive={false}
-            dot={false}
-          />
-        </AreaChart>
-      </ResponsiveContainer>
-    </div>
-  )
+    const times = syntheticBusinessDaySeries(seriesPoints.length)
+    area.setData(
+      times.map((time, i) => ({
+        time,
+        value: seriesPoints[i]!.y,
+      })),
+    )
+
+    area.createPriceLine({
+      price: prevClose,
+      color: '#666',
+      lineWidth: 1,
+      lineStyle: LineStyle.Dashed,
+      axisLabelVisible: true,
+      title: 'prev',
+    })
+
+    chart.timeScale().fitContent()
+
+    return () => {
+      chart.remove()
+    }
+  }, [closes, points, prevClose, price, seed, up])
+
+  return <div ref={wrapRef} className="bb-eq-chart__chart" aria-hidden="true" />
 }
-

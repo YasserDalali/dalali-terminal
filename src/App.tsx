@@ -15,10 +15,10 @@ import { BudgetPage } from './components/panels/budget/BudgetPage'
 import { FinancePage } from './components/panels/finance/FinancePage'
 import { PortfolioPage } from './components/panels/portfolio/PortfolioPage'
 import { NAV_MODULES, type ModuleId } from './data/modules'
-import { normalizeEquitySymbol } from './data/mockEquity'
+import { normalizeEquitySymbol } from './data/equitySymbol'
 import { equityHref } from './navigation/equityRoutes'
 import { DEFAULT_EQUITY_SYMBOL } from './services/market/marketConfig'
-import { useMarketData } from './services/market/marketDataStore'
+import { MARKET_DATA_REFRESH_INTERVAL_MS, useMarketData } from './services/market/marketDataStore'
 
 function formatTime(d: Date) {
   return d.toLocaleTimeString(undefined, { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
@@ -32,27 +32,36 @@ export default function App() {
     ? decodeURIComponent(equityMatch.params.symbol)
     : undefined
 
-  const { setEquitySymbol, equitySymbol } = useMarketData()
+  const { setEquitySymbol, equitySymbol, lastUpdated, error, loading } = useMarketData()
   const [splash, setSplash] = useState(true)
   const [activeModule, setActiveModule] = useState<ModuleId>('markets')
   const [advisorOpen, setAdvisorOpen] = useState(false)
-  const [ibkrConnected] = useState(true)
-  const [lastSync, setLastSync] = useState(() => formatTime(new Date()))
-  const [fxCountdown, setFxCountdown] = useState(3600)
+  const [clockTime, setClockTime] = useState(() => formatTime(new Date()))
+  const [secondsToRefresh, setSecondsToRefresh] = useState(0)
+
+  const feedOk = lastUpdated !== null && !error
 
   useEffect(() => {
     const t = window.setInterval(() => {
-      setLastSync(formatTime(new Date()))
+      setClockTime(formatTime(new Date()))
     }, 1000)
     return () => window.clearInterval(t)
   }, [])
 
   useEffect(() => {
-    const t = window.setInterval(() => {
-      setFxCountdown((s) => (s <= 1 ? 3600 : s - 1))
-    }, 1000)
+    const tick = () => {
+      if (!lastUpdated) {
+        setSecondsToRefresh(0)
+        return
+      }
+      const elapsed = Date.now() - lastUpdated.getTime()
+      const left = MARKET_DATA_REFRESH_INTERVAL_MS - elapsed
+      setSecondsToRefresh(Math.max(0, Math.ceil(left / 1000)))
+    }
+    tick()
+    const t = window.setInterval(tick, 1000)
     return () => window.clearInterval(t)
-  }, [])
+  }, [lastUpdated])
 
   const toggleAdvisor = useCallback(() => setAdvisorOpen((o) => !o), [])
   const closeAdvisor = useCallback(() => setAdvisorOpen(false), [])
@@ -84,11 +93,7 @@ export default function App() {
     <>
       {splash ? <SplashScreen onDone={endSplash} /> : null}
       <div className="bb-app">
-      <TopBar
-        activeModule={resolvedModule}
-        onModuleChange={handleModuleChange}
-        ibkrConnected={ibkrConnected}
-      />
+      <TopBar activeModule={resolvedModule} onModuleChange={handleModuleChange} feedOk={feedOk && !loading} />
 
       <div className="bb-body">
         <Sidebar activeModule={resolvedModule} onModuleChange={handleModuleChange} />
@@ -115,11 +120,12 @@ export default function App() {
       <CommandLine />
 
       <StatusBar
-        sessionLabel="NYSE · REGULAR"
+        sessionLabel="NYSE · REGULAR (REF)"
         baseCurrency="USD"
-        fxCountdownSec={fxCountdown}
-        lastSync={lastSync}
-        ibkrConnected={ibkrConnected}
+        secondsToRefresh={secondsToRefresh}
+        clockTime={clockTime}
+        lastDataRefresh={lastUpdated ? formatTime(lastUpdated) : '—'}
+        feedOk={feedOk && !loading}
       />
 
       <AdvisorDrawer

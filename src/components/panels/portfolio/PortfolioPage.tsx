@@ -1,14 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  Area,
-  CartesianGrid,
-  ComposedChart,
-  Line,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts'
 import type { IbkrFlexPortfolio, IbkrNavHistoryPoint, IbkrTradeRow } from '../../../services/finance/ibkrFlexTypes'
 import {
   fetchPortfolioFromApi,
@@ -42,6 +32,7 @@ import {
 } from './portfolioChartUtils'
 import { FinDataTable, type FinDataTableCol } from '../../fin/FinDataTable'
 import { PortfolioChartToolbar } from './PortfolioChartToolbar'
+import { PortfolioLightweightChart } from './PortfolioLightweightChart'
 import { PortfolioHoldingsTab } from './PortfolioHoldingsTab'
 import {
   formatFlexYyyymmdd,
@@ -773,122 +764,18 @@ export function PortfolioPage() {
 
                   {navChartRows.length > 0 ? (
                     <div className="bb-pf-chart">
-                      {chartMode === 'nav' ? (
-                        <ResponsiveContainer width="100%" height={240}>
-                          <ComposedChart data={navChartRows} margin={{ top: 8, right: 14, left: 4, bottom: 4 }}>
-                            <defs>
-                              <linearGradient id="pfNavFill" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stopColor="#0f0" stopOpacity={0.25} />
-                                <stop offset="100%" stopColor="#0f0" stopOpacity={0} />
-                              </linearGradient>
-                            </defs>
-                            <CartesianGrid stroke="#333" strokeDasharray="3 3" />
-                            <XAxis dataKey="dateLabel" tick={{ fill: '#888', fontSize: 10 }} interval="preserveStartEnd" />
-                            <YAxis
-                              yAxisId="l"
-                              orientation="right"
-                              scale={logScale ? 'log' : 'linear'}
-                              domain={logScale ? [0.01, 'auto'] : navYDomain ?? ['auto', 'auto']}
-                              allowDataOverflow={truncated}
-                              tick={{ fill: '#888', fontSize: 10 }}
-                              tickFormatter={(v) => (Number.isFinite(v) ? Number(v).toFixed(0) : '')}
-                              width={44}
-                            />
-                            <Tooltip
-                              contentStyle={{ background: '#111', border: '1px solid #444', fontSize: 11 }}
-                              formatter={(value) => formatUsd(Number(value ?? 0))}
-                            />
-                            {navLines.total ? (
-                              <Area
-                                yAxisId="l"
-                                type="monotone"
-                                dataKey="total"
-                                name="Total NAV"
-                                stroke="#0f0"
-                                fill="url(#pfNavFill)"
-                                strokeWidth={1.5}
-                                isAnimationActive={false}
-                              />
-                            ) : null}
-                            {navLines.stock ? (
-                              <Line
-                                yAxisId="l"
-                                type="monotone"
-                                dataKey="stock"
-                                name="Stock"
-                                stroke="#ff6600"
-                                dot={false}
-                                strokeWidth={1}
-                                isAnimationActive={false}
-                              />
-                            ) : null}
-                            {navLines.cash ? (
-                              <Line
-                                yAxisId="l"
-                                type="monotone"
-                                dataKey="cash"
-                                name="Cash"
-                                stroke="#7F77DD"
-                                dot={false}
-                                strokeWidth={1}
-                                isAnimationActive={false}
-                              />
-                            ) : null}
-                          </ComposedChart>
-                        </ResponsiveContainer>
-                      ) : (
-                        <ResponsiveContainer width="100%" height={240}>
-                          <ComposedChart data={perfChartRows} margin={{ top: 8, right: 14, left: 4, bottom: 4 }}>
-                            <defs>
-                              <linearGradient id="pfPerfFill" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stopColor="#f44" stopOpacity={0.3} />
-                                <stop offset="100%" stopColor="#f44" stopOpacity={0} />
-                              </linearGradient>
-                            </defs>
-                            <CartesianGrid stroke="#333" strokeDasharray="3 3" />
-                            <XAxis dataKey="dateLabel" tick={{ fill: '#888', fontSize: 10 }} interval="preserveStartEnd" />
-                            <YAxis
-                              yAxisId="p"
-                              orientation="right"
-                              domain={perfYDomain ?? ['auto', 'auto']}
-                              allowDataOverflow={truncated}
-                              tick={{ fill: '#888', fontSize: 10 }}
-                              tickFormatter={(v) => `${Number(v).toFixed(1)}%`}
-                              width={48}
-                            />
-                            <Tooltip
-                              contentStyle={{ background: '#111', border: '1px solid #444', fontSize: 11 }}
-                              formatter={(value, name) => [`${Number(value ?? 0).toFixed(2)}%`, String(name)]}
-                            />
-                            <Area
-                              yAxisId="p"
-                              type="monotone"
-                              dataKey="portPct"
-                              name="Portfolio %"
-                              stroke="#f44"
-                              fill="url(#pfPerfFill)"
-                              strokeWidth={1.5}
-                              isAnimationActive={false}
-                            />
-                            {BENCHMARKS.map((b) =>
-                              benchOn[b.id] ? (
-                                <Line
-                                  key={b.id}
-                                  yAxisId="p"
-                                  type="monotone"
-                                  dataKey={`${b.id}Pct`}
-                                  name={`${b.short} %`}
-                                  stroke={b.color}
-                                  dot={false}
-                                  strokeWidth={1.25}
-                                  connectNulls
-                                  isAnimationActive={false}
-                                />
-                              ) : null,
-                            )}
-                          </ComposedChart>
-                        </ResponsiveContainer>
-                      )}
+                      <PortfolioLightweightChart
+                        chartMode={chartMode}
+                        logScale={logScale}
+                        truncated={truncated}
+                        navRows={navChartRows}
+                        perfRows={perfChartRows}
+                        navLines={navLines}
+                        benchOn={benchOn}
+                        benchmarks={BENCHMARKS.map((b) => ({ id: b.id, short: b.short, color: b.color }))}
+                        navYDomain={navYDomain}
+                        perfYDomain={perfYDomain}
+                      />
                     </div>
                   ) : (
                     <p className="bb-fin-mutedHint">No equity-by-date rows for this span.</p>

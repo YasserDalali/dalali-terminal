@@ -39,9 +39,9 @@ export function AdvisorDrawer({ open, onToggle, onClose, activeModuleLabel }: Ad
         </div>
         <div className="bb-modal__sub">CTX: {activeModuleLabel.toUpperCase()}</div>
         <div className="bb-modal__body">
-          <div className="bb-modal__line">
-            <span className="bb-modal__prompt">&gt;</span> Streaming response area. Context from active
-            function.
+          <div className="bb-modal__line muted">
+            <span className="bb-modal__prompt">&gt;</span> Assistant not connected — demo UI only. Context:
+            active function.
           </div>
         </div>
         <div className="bb-modal__footer">
@@ -54,7 +54,7 @@ export function AdvisorDrawer({ open, onToggle, onClose, activeModuleLabel }: Ad
             value={input}
             onChange={(e) => setInput(e.target.value)}
           />
-          <button type="button" className="bb-modal__send">
+          <button type="button" className="bb-modal__send" disabled title="Not implemented">
             GO
           </button>
         </div>

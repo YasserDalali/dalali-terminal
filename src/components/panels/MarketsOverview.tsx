@@ -5,9 +5,8 @@ import { EquityLink } from '../EquityLink'
 import { equityHref } from '../../navigation/equityRoutes'
 import { BRAND_ACRONYM } from '../../data/brand'
 import { StripSparkline } from '../charts/StripSparkline'
+import { EQUITY_CHART_RANGES } from '../../data/equityChartRanges'
 import { useMarketData, type WatchlistRow } from '../../services/market/marketDataStore'
-
-const RANGES = ['1D', '5D', '1M', '6M', 'YTD', '1Y', '5Y', 'MAX'] as const
 
 function Pill({ children, positive }: { children: ReactNode; positive: boolean }) {
   return (
@@ -114,12 +113,10 @@ export function MarketsOverview() {
             Retry
           </button>
         ) : null}
-        <label className="bb-workspace__fld">
+        <label className="bb-workspace__fld" title="Watchlist and indices use US-listed Stooq symbols only">
           REGION
-          <select className="bb-sel" defaultValue="US">
+          <select className="bb-sel" disabled value="US">
             <option value="US">US</option>
-            <option value="EU">EU</option>
-            <option value="ASIA">ASIA</option>
           </select>
         </label>
       </div>
@@ -133,8 +130,7 @@ export function MarketsOverview() {
       <div className="bb-strip" aria-label="Indices">
         {indices.map((a) => {
           const displayUp = a.inverse ? !a.up : a.up
-          const spark =
-            a.sparkCloses.length >= 2 ? a.sparkCloses : [displayUp ? 52 : 48, displayUp ? 54 : 46]
+          const hasSpark = a.sparkCloses.length >= 2
           return (
             <div key={a.id} className="bb-strip__cell">
               <div className="bb-strip__sym">{a.label}</div>
@@ -143,8 +139,18 @@ export function MarketsOverview() {
                 <Pill positive={displayUp}>{a.delta}</Pill>
                 <Pill positive={displayUp}>{a.pct}</Pill>
               </div>
-              <div className={`bb-strip__spark bb-strip__spark--${displayUp ? 'up' : 'dn'}`} aria-hidden>
-                <StripSparkline values={spark} up={displayUp} />
+              <div
+                className={`bb-strip__spark bb-strip__spark--${displayUp ? 'up' : 'dn'}`}
+                aria-hidden
+                title={hasSpark ? undefined : 'No intraday series; sparkline hidden'}
+              >
+                {hasSpark ? (
+                  <StripSparkline values={a.sparkCloses} up={displayUp} />
+                ) : (
+                  <span className="mono muted" style={{ fontSize: '0.7rem', alignSelf: 'center' }}>
+                    —
+                  </span>
+                )}
               </div>
             </div>
           )
@@ -154,12 +160,15 @@ export function MarketsOverview() {
       <div className="bb-split">
         <section className="bb-win">
           <header className="bb-win__bar">
-            <span className="bb-win__ttl">MARKET SUMMARY</span>
+            <span className="bb-win__ttl">MARKET SUMMARY · DEMO</span>
             <span className="bb-win__meta mono">{formatRefreshMeta(lastUpdated, tick)}</span>
           </header>
+          <p className="mono muted" style={{ margin: '0.35rem 0.75rem', fontSize: '0.75rem' }}>
+            Placeholder copy only — not wired to a news feed.
+          </p>
           <ul className="bb-news">
             <li className="bb-news__item bb-news__item--on">
-              <button type="button" className="bb-news__line bb-news__line--hot">
+              <button type="button" className="bb-news__line bb-news__line--hot" disabled>
                 Equities firm as duration risk fades; megacap tech leads breadth recovery.
               </button>
               <p className="bb-news__body">
@@ -167,16 +176,16 @@ export function MarketsOverview() {
                 shows systematic buying into the close; watch liquidity around key strikes.
               </p>
               <div className="bb-news__src">
-                <span className="mono">62 SRC</span>
+                <span className="mono">DEMO</span>
               </div>
             </li>
             <li className="bb-news__item">
-              <button type="button" className="bb-news__line">
+              <button type="button" className="bb-news__line" disabled>
                 Credit spreads unchanged; IG demand steady into month-end.
               </button>
             </li>
             <li className="bb-news__item">
-              <button type="button" className="bb-news__line">
+              <button type="button" className="bb-news__line" disabled>
                 Dollar index drifts; EM FX mixed on carry positioning.
               </button>
             </li>
@@ -185,8 +194,11 @@ export function MarketsOverview() {
 
         <section className="bb-win">
           <header className="bb-win__bar">
-            <span className="bb-win__ttl">KEY METRICS</span>
+            <span className="bb-win__ttl">KEY METRICS · DEMO</span>
           </header>
+          <p className="mono muted" style={{ margin: '0.35rem 0.75rem', fontSize: '0.75rem' }}>
+            Sample numbers for layout — not live breadth or options data.
+          </p>
           <div className="bb-metrics">
             <div className="bb-metrics__row">
               <span className="bb-metrics__k">ADV/DEC NYSE</span>
@@ -211,7 +223,7 @@ export function MarketsOverview() {
       <section className="bb-win bb-win--wide">
         <header className="bb-win__bar">
           <span className="bb-win__ttl">S&amp;P 500 HEATMAP</span>
-          <button type="button" className="bb-btn">
+          <button type="button" className="bb-btn" disabled title="Not implemented">
             EXPAND
           </button>
         </header>
@@ -247,12 +259,13 @@ export function MarketsOverview() {
       <section className="bb-win">
         <header className="bb-win__bar bb-win__bar--tabs">
           <span className="bb-win__ttl">WATCHLIST</span>
-          <div className="bb-tabs" role="tablist">
-            {RANGES.map((r) => (
+          <div className="bb-tabs" role="tablist" title="Watchlist time range not wired to data">
+            {EQUITY_CHART_RANGES.map((r) => (
               <button
                 key={r}
                 type="button"
                 role="tab"
+                disabled
                 className={`bb-tabs__t${r === '1M' ? ' bb-tabs__t--on' : ''}`}
               >
                 {r}

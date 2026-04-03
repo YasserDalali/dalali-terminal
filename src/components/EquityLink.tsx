@@ -1,5 +1,5 @@
 import { Link, type LinkProps } from 'react-router-dom'
-import { normalizeEquitySymbol } from '../data/mockEquity'
+import { normalizeEquitySymbol } from '../data/equitySymbol'
 import { equityHref } from '../navigation/equityRoutes'
 
 export type EquityLinkVariant = 'inline' | 'pill'

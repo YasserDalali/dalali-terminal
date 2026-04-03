@@ -1,7 +1,6 @@
-export function formatUsd(n: number) {
-  if (!Number.isFinite(n)) return '—'
-  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
+import { formatUsd } from '../../../utils/formatMoney'
+
+export { formatUsd }
 
 export function formatUsdMoney(n: number) {
   if (!Number.isFinite(n)) return '—'
