@@ -12,13 +12,34 @@ import type {
 
 const FLEX_PROXY_PREFIX = '/ibkr-flex'
 
-/** Browser: relative proxy. Server: pass `flexBaseUrl` e.g. https://gdcdyn.interactivebrokers.com/Universal/servlet */
+/**
+ * Current Flex Web Service base (IBKR Campus, 2024+).
+ * Legacy: https://gdcdyn.interactivebrokers.com/Universal/servlet + FlexStatementService.SendRequest
+ */
+export const IBKR_FLEX_WEB_SERVICE_DEFAULT_BASE =
+  'https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService'
+
+const FLEX_UA = 'DalaliTerminal/1.0 (IBKR Flex Web Service client)'
+
+function isLegacyFlexServletBase(base: string): boolean {
+  return /\/Universal\/servlet\/?$/i.test(base.replace(/\/$/, ''))
+}
+
+/** Path segment(s) after base: modern `SendRequest` or legacy `FlexStatementService.SendRequest`. */
+function flexPathSegment(servlet: 'SendRequest' | 'GetStatement', flexBaseUrl?: string): string {
+  if (flexBaseUrl && isLegacyFlexServletBase(flexBaseUrl)) {
+    return `FlexStatementService.${servlet}`
+  }
+  return servlet
+}
+
+/** Browser: relative /ibkr-flex proxy. Server: pass flexBaseUrl (modern or legacy Universal/servlet). */
 function flexUrl(
   servlet: 'SendRequest' | 'GetStatement',
   query: Record<string, string>,
   flexBaseUrl?: string,
 ) {
-  const path = `FlexStatementService.${servlet}`
+  const path = flexPathSegment(servlet, flexBaseUrl)
   const qs = new URLSearchParams({ ...query, v: '3' })
   if (flexBaseUrl) {
     const base = flexBaseUrl.replace(/\/$/, '')
@@ -27,11 +48,49 @@ function flexUrl(
   return `${FLEX_PROXY_PREFIX}/${path}?${qs.toString()}`
 }
 
+function redactFlexUrlForLog(url: string): string {
+  return url.replace(/([?&]t=)[^&]*/gi, '$1***').replace(/([?&]q=)[^&]*/gi, '$1***')
+}
+
+function formatFlexNetworkError(err: unknown, url: string): string {
+  if (!(err instanceof Error)) return `${String(err)} @ ${redactFlexUrlForLog(url)}`
+  const parts: string[] = [err.message]
+  let c: unknown = err.cause
+  for (let i = 0; i < 6 && c instanceof Error; i += 1) {
+    parts.push(c.message)
+    c = c.cause
+  }
+  const ext = err as Error & { code?: string }
+  if (ext.code) parts.push(`code=${ext.code}`)
+  return `${parts.join(' — ')} @ ${redactFlexUrlForLog(url)}`
+}
+
+/** IBKR requires a User-Agent on Flex Web Service requests. */
+export async function flexFetch(url: string): Promise<Response> {
+  try {
+    return await fetch(url, {
+      headers: { 'User-Agent': FLEX_UA },
+    })
+  } catch (e) {
+    throw new Error(`Flex fetch failed: ${formatFlexNetworkError(e, url)}`)
+  }
+}
+
 function sleep(ms: number) {
   return new Promise<void>((r) => setTimeout(r, ms))
 }
 
 export function parseFlexSendResponse(xml: string): { referenceCode: string } | { error: string } {
+  const raw = xml.trim()
+  const looksLikeHtml =
+    /^<!DOCTYPE/i.test(raw) || /^<html[\s>]/i.test(raw) || /<head[\s>]|<body[\s>]/i.test(raw.slice(0, 500))
+  if (!raw.startsWith('<') || looksLikeHtml) {
+    return {
+      error:
+        'Flex SendRequest returned non-XML (often HTML from your host). The /ibkr-flex path only works with the Vite dev proxy. In production build: set VITE_USE_PORTFOLIO_API=1, run the portfolio API server with IBKR_FLEX_TOKEN and IBKR_FLEX_QUERY_ID, and proxy /api to it—do not call IBKR Flex from the browser.',
+    }
+  }
+
   const status = xml.match(/<Status>([^<]+)<\/Status>/i)?.[1]?.trim() ?? ''
   const errMsg = xml.match(/<ErrorMessage>([^<]*)<\/ErrorMessage>/i)?.[1]?.trim()
   if (status && !/^success$/i.test(status)) {
@@ -39,7 +98,11 @@ export function parseFlexSendResponse(xml: string): { referenceCode: string } | 
   }
   const referenceCode = xml.match(/<ReferenceCode>([^<]+)<\/ReferenceCode>/i)?.[1]?.trim()
   if (!referenceCode) {
-    return { error: errMsg || 'No ReferenceCode in SendRequest response' }
+    return {
+      error:
+        errMsg ||
+        'No ReferenceCode in SendRequest response (invalid token/query, Flex Web Service disabled, IP not whitelisted, or unexpected XML). Check IBKR Client Portal → Flex Web Service.',
+    }
   }
   return { referenceCode }
 }
@@ -260,8 +323,15 @@ export async function requestFlexReferenceCode(
   flexBaseUrl?: string,
 ): Promise<string> {
   const url = flexUrl('SendRequest', { t: token, q: queryId }, flexBaseUrl)
-  const res = await fetch(url)
+  const res = await flexFetch(url)
   const xml = await res.text()
+  if (!res.ok) {
+    const hint =
+      url.startsWith(FLEX_PROXY_PREFIX) && !flexBaseUrl
+        ? ' (relative /ibkr-flex only works in vite dev; use portfolio API or flexBaseUrl on server)'
+        : ''
+    throw new Error(`Flex SendRequest HTTP ${res.status}${hint}`)
+  }
   const parsed = parseFlexSendResponse(xml)
   if ('error' in parsed) {
     throw new Error(parsed.error)
@@ -277,7 +347,7 @@ export async function fetchFlexStatementXml(
 ): Promise<string> {
   await sleep(waitMs)
   const url = flexUrl('GetStatement', { t: token, q: refCode }, flexBaseUrl)
-  const res = await fetch(url)
+  const res = await flexFetch(url)
   return res.text()
 }
 

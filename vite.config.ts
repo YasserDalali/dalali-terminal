@@ -21,12 +21,12 @@ export default defineConfig(({ mode }) => {
           target: 'http://127.0.0.1:8787',
           changeOrigin: true,
         },
-        // IB Flex Web Service (browser cannot call IBKR directly due to CORS)
+        // IB Flex Web Service — modern path (see IBKR Flex Web Service docs / AccountManagement/FlexWebService)
         '/ibkr-flex': {
-          target: 'https://gdcdyn.interactivebrokers.com',
+          target: 'https://ndcdyn.interactivebrokers.com',
           changeOrigin: true,
           secure: true,
-          rewrite: (path) => path.replace(/^\/ibkr-flex/, '/Universal/servlet'),
+          rewrite: (path) => path.replace(/^\/ibkr-flex/, '/AccountManagement/FlexWebService'),
         },
         '/stooq-proxy': {
           target: 'https://stooq.com',

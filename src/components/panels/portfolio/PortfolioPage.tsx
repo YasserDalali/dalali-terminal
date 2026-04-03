@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { IbkrFlexPortfolio, IbkrNavHistoryPoint, IbkrTradeRow } from '../../../services/finance/ibkrFlexTypes'
 import {
-  fetchPortfolioFromApi,
   getIbkrFlexEnv,
   loadIbkrFlexPortfolio,
   loadIbkrFlexPortfolioFromFixture,
-  requestPortfolioSync,
-  type PortfolioApiEnvelope,
 } from '../../../services/finance/ibkrFlexService'
+import {
+  formatPortfolioCachedAt,
+  usePortfolioLifted,
+} from '../../../services/portfolio/portfolioApiContext'
 import {
   closestCloseOnOrBefore,
   fetchStooqDaily,
@@ -114,9 +115,18 @@ export function PortfolioPage() {
   const canLiveDirect = Boolean(token && queryId) && !canApi
   const canFixture = Boolean(fixtureUrl) && !canApi
 
-  const [status, setStatus] = useState<'idle' | 'loading' | 'ok' | 'err'>(() => (canApi ? 'loading' : 'idle'))
-  const [error, setError] = useState<string | null>(null)
-  const [data, setData] = useState<IbkrFlexPortfolio | null>(null)
+  const lifted = usePortfolioLifted()
+  const isLifted = lifted != null
+
+  const [localStatus, setLocalStatus] = useState<'idle' | 'loading' | 'ok' | 'err'>('idle')
+  const [localError, setLocalError] = useState<string | null>(null)
+  const [localData, setLocalData] = useState<IbkrFlexPortfolio | null>(null)
+
+  const data = isLifted ? lifted.data : localData
+  const status = isLifted ? lifted.status : localStatus
+  const error = isLifted ? lifted.error : localError
+  const cachedAt = isLifted ? lifted.cachedAt : null
+
   const dataRef = useRef<IbkrFlexPortfolio | null>(null)
   useEffect(() => {
     dataRef.current = data
@@ -141,73 +151,35 @@ export function PortfolioPage() {
   const [sym1d, setSym1d] = useState<Record<string, { pct: number }>>({})
   const [marketNote, setMarketNote] = useState<string | null>(null)
 
-  const applyPortfolioEnvelope = useCallback((env: PortfolioApiEnvelope) => {
-    if (env.data != null) {
-      setData(env.data)
-      setStatus('ok')
-      setError(env.ok ? null : (env.error ?? null))
-      return
-    }
-    setStatus((prev) => (prev === 'loading' ? 'err' : prev))
-    if (env.error) setError(env.error)
-  }, [])
+  const refreshLifted = lifted?.refresh
 
   const sync = useCallback(async () => {
-    setError(null)
-    setStatus('loading')
+    if (refreshLifted) {
+      await refreshLifted()
+      return
+    }
+    setLocalError(null)
+    setLocalStatus('loading')
     try {
-      if (canApi) {
-        const env = await requestPortfolioSync(portfolioApiBase)
-        if (env.data != null) {
-          applyPortfolioEnvelope(env)
-        } else {
-          setError(env.error ?? 'Sync failed')
-          setStatus(dataRef.current != null ? 'ok' : 'err')
-        }
-      } else if (canLiveDirect) {
+      if (canLiveDirect) {
         const portfolio = await loadIbkrFlexPortfolio(token, queryId)
-        setData(portfolio)
-        setStatus('ok')
+        setLocalData(portfolio)
+        setLocalStatus('ok')
       } else if (canFixture) {
         const portfolio = await loadIbkrFlexPortfolioFromFixture(fixtureUrl)
-        setData(portfolio)
-        setStatus('ok')
+        setLocalData(portfolio)
+        setLocalStatus('ok')
       } else {
         throw new Error(
           'Configure .env: VITE_USE_PORTFOLIO_API=1 + portfolio API, or IBKR_FLEX_TOKEN + IBKR_FLEX_QUERY_ID, or VITE_IBKR_FLEX_FIXTURE_URL',
         )
       }
     } catch (e) {
-      setData(null)
-      setError(e instanceof Error ? e.message : String(e))
-      setStatus('err')
+      setLocalData(null)
+      setLocalError(e instanceof Error ? e.message : String(e))
+      setLocalStatus('err')
     }
-  }, [
-    applyPortfolioEnvelope,
-    canApi,
-    canFixture,
-    canLiveDirect,
-    fixtureUrl,
-    portfolioApiBase,
-    queryId,
-    token,
-  ])
-
-  useEffect(() => {
-    if (!canApi) return
-    let cancel = false
-    const poll = async () => {
-      const env = await fetchPortfolioFromApi(portfolioApiBase)
-      if (cancel) return
-      applyPortfolioEnvelope(env)
-    }
-    void poll()
-    const id = setInterval(poll, portfolioPollMs)
-    return () => {
-      cancel = true
-      clearInterval(id)
-    }
-  }, [applyPortfolioEnvelope, canApi, portfolioApiBase, portfolioPollMs])
+  }, [canFixture, canLiveDirect, fixtureUrl, queryId, refreshLifted, token])
 
   const fundingYmd = useMemo(
     () => (data ? resolveFundingStartYmd(data.account.dateFunded) : DEFAULT_FUNDING_FLOOR_YMD),
@@ -450,19 +422,39 @@ export function PortfolioPage() {
         <header className="bb-win__bar">
           <span className="bb-win__ttl">IBKR FLEX · PORTFOLIO</span>
           <span className="bb-ibkr-flex__barRight">
-            {data?.queryName ? (
-              <span className="bb-win__meta mono" title="Flex query name">
-                {data.queryName}
-                {data.flexType ? ` · ${data.flexType}` : ''}
+            {canApi ? (
+              <span
+                className="bb-win__meta mono"
+                title="When the portfolio API last wrote this snapshot to Redis (after a successful IBKR Flex pull)"
+              >
+                Last sync {formatPortfolioCachedAt(cachedAt)}
               </span>
             ) : null}
             <button
               type="button"
               className="bb-btn"
-              disabled={status === 'loading' || (!canApi && !canLiveDirect && !canFixture)}
+              disabled={
+                (isLifted
+                  ? lifted.busy || (lifted.status === 'loading' && !lifted.data)
+                  : status === 'loading') ||
+                (!canApi && !canLiveDirect && !canFixture)
+              }
+              title={
+                canApi
+                  ? 'Optional: POST /api/portfolio/sync — IBKR→Redis immediately. Background polling keeps running when you switch tabs.'
+                  : undefined
+              }
               onClick={() => void sync()}
             >
-              {status === 'loading' ? 'SYNCING…' : canApi ? 'SYNC NOW' : 'SYNC FLEX'}
+              {isLifted && lifted.busy
+                ? 'REFRESHING…'
+                : status === 'loading'
+                  ? canApi
+                    ? 'LOADING…'
+                    : 'SYNCING…'
+                  : canApi
+                    ? 'REFRESH NOW'
+                    : 'SYNC FLEX'}
             </button>
           </span>
         </header>
@@ -470,8 +462,11 @@ export function PortfolioPage() {
         <div className="bb-ibkr-flex__body">
           {canApi ? (
             <p className="bb-fin-mutedHint">
-              Portfolio data is loaded from the cache API (Redis). Polls every{' '}
-              <span className="mono">{Math.round(portfolioPollMs / 1000)}s</span>
+              Data stays warm while you use other modules: polling and Redis cache run at the app root. The server
+              refreshes IBKR Flex on a timer and stores JSON in Redis; the client pulls{' '}
+              <span className="mono">GET /api/portfolio</span> every <span className="mono">{Math.round(portfolioPollMs / 1000)}s</span>.
+              A copy of the last response is kept in <span className="mono">sessionStorage</span> for a fast return to
+              this tab. Use Refresh for an immediate <span className="mono">POST /api/portfolio/sync</span> (also writes Redis).
               {portfolioApiBase ? (
                 <>
                   {' '}

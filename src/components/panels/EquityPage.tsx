@@ -131,22 +131,6 @@ export function EquityPage() {
                   {Number.isFinite(prevClose) ? prevClose.toFixed(2) : q.price - q.change} PREV CLOSE
                 </div>
               </div>
-              <div
-                className="bb-eq-vol"
-                aria-hidden
-                title="Decorative bars only — volume from feed not shown here"
-              >
-                <span className="bb-eq-vol__lbl">VOL</span>
-                <div className="bb-eq-vol__bars">
-                  {Array.from({ length: 40 }).map((_, i) => (
-                    <span
-                      key={i}
-                      className={`bb-eq-vol__b${i % 3 === 0 ? ' bb-eq-vol__b--dn' : ' bb-eq-vol__b--up'}`}
-                      style={{ height: `${20 + ((i * 7) % 55)}%` }}
-                    />
-                  ))}
-                </div>
-              </div>
             </section>
 
             <section className="bb-eq-kstats" aria-label="Key statistics">
@@ -263,31 +247,6 @@ export function EquityPage() {
                   </div>
                 </div>
                 <div className="bb-eq-pt__now mono">LAST {formatUsd(q.price)}</div>
-              </div>
-            </section>
-
-            <section className="bb-eq-side__blk">
-              <div className="bb-eq-side__row">
-                <h2 className="bb-eq-side__ttl bb-eq-side__ttl--inline">EPS VS EST.</h2>
-                <span className="muted mono">12Q</span>
-              </div>
-              <div className="bb-eq-eps">
-                {[
-                  { beat: true },
-                  { beat: true },
-                  { beat: false },
-                  { beat: true },
-                  { beat: true },
-                  { beat: true },
-                  { beat: true },
-                  { beat: false },
-                ].map((b, i) => (
-                  <span
-                    key={i}
-                    className={`bb-eq-eps__dot${b.beat ? ' bb-eq-eps__dot--beat' : ' bb-eq-eps__dot--miss'}`}
-                    title={b.beat ? 'Beat' : 'Miss'}
-                  />
-                ))}
               </div>
             </section>
 

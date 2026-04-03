@@ -3,6 +3,9 @@
 #   export IBKR_FLEX_TOKEN=... IBKR_FLEX_QUERY_ID=...
 #   docker compose up --build
 #
+# Redis Cloud: set REDIS_URL in .env (rediss://… if TLS). The bundled `redis` service is still started but ignored
+# when REDIS_URL points elsewhere. For API-only without local Redis, run `npm run server` with REDIS_URL set.
+#
 # Frontend: set VITE_USE_PORTFOLIO_API=1 and VITE_PORTFOLIO_API_BASE=http://localhost:8787 (or proxy /api in prod).
 
 services:
@@ -21,12 +24,14 @@ services:
     ports:
       - "8787:8787"
     environment:
-      REDIS_URL: redis://redis:6379
+      # Default: bundled Redis service. Override with Redis Cloud, e.g.
+      # REDIS_URL=rediss://default:PASSWORD@redis-11718.crce202.eu-west-3-1.ec2.cloud.redislabs.com:11718
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       PORTFOLIO_REDIS_KEY: ${PORTFOLIO_REDIS_KEY:-dalali:portfolio:payload}
       PORTFOLIO_POLL_MS: ${PORTFOLIO_POLL_MS:-120000}
       IBKR_FLEX_TOKEN: ${IBKR_FLEX_TOKEN}
       IBKR_FLEX_QUERY_ID: ${IBKR_FLEX_QUERY_ID}
-      IBKR_FLEX_DIRECT_BASE: ${IBKR_FLEX_DIRECT_BASE:-https://gdcdyn.interactivebrokers.com/Universal/servlet}
+      IBKR_FLEX_DIRECT_BASE: ${IBKR_FLEX_DIRECT_BASE:-https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService}
       IBKR_GETSTATEMENT_WAIT_MS: ${IBKR_GETSTATEMENT_WAIT_MS:-5000}
     depends_on:
       - redis

@@ -4,12 +4,15 @@ import { BrowserRouter } from 'react-router-dom'
 import './index.css'
 import App from './App.tsx'
 import { MarketDataProvider } from './services/market/marketDataStore'
+import { PortfolioDataProvider } from './services/portfolio/portfolioApiContext'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
       <MarketDataProvider>
-        <App />
+        <PortfolioDataProvider>
+          <App />
+        </PortfolioDataProvider>
       </MarketDataProvider>
     </BrowserRouter>
   </StrictMode>,

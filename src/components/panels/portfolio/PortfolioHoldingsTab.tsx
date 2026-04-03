@@ -149,9 +149,6 @@ function HoldingsTablePanel({
         <h2 className="bb-eq-sec__ttl">
           Holdings table{titleExtra ? <span className="muted"> {titleExtra}</span> : null}
         </h2>
-        <button type="button" className="bb-eq-btn bb-eq-btn--pri">
-          ↓ DL
-        </button>
       </div>
       <FinDataTableShell
         rows={positions}

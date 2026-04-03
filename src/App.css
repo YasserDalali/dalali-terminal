@@ -1355,44 +1355,6 @@ a.bb-eq-badge {
   color: var(--bb-dim);
 }
 
-.bb-eq-vol {
-  display: flex;
-  align-items: stretch;
-  height: 48px;
-  border-top: 1px solid var(--bb-line);
-  padding: 2px 4px;
-  gap: 4px;
-}
-
-.bb-eq-vol__lbl {
-  flex-shrink: 0;
-  font-size: 9px;
-  color: var(--bb-orange);
-  padding: 4px 4px 0;
-  writing-mode: vertical-rl;
-  transform: rotate(180deg);
-}
-
-.bb-eq-vol__bars {
-  flex: 1;
-  display: flex;
-  align-items: flex-end;
-  gap: 1px;
-  min-height: 0;
-}
-
-.bb-eq-vol__b {
-  flex: 1;
-  min-width: 2px;
-  max-width: 8px;
-  background: #0a3d0a;
-  align-self: flex-end;
-}
-
-.bb-eq-vol__b--dn {
-  background: #3d0a0a;
-}
-
 .bb-eq-sec__ttl {
   margin: 0 0 8px;
   font-size: 11px;
@@ -1540,17 +1502,6 @@ a.bb-eq-badge {
   color: var(--bb-yellow);
 }
 
-.bb-eq-side__ttl--inline {
-  margin: 0;
-}
-
-.bb-eq-side__row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
 .bb-eq-dl {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -1692,29 +1643,6 @@ a.bb-eq-badge {
 .bb-eq-pt__now {
   font-size: 11px;
   color: #fff;
-}
-
-.bb-eq-eps {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.bb-eq-eps__dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  border: 1px solid var(--bb-line);
-}
-
-.bb-eq-eps__dot--beat {
-  background: var(--bb-up);
-  border-color: #080;
-}
-
-.bb-eq-eps__dot--miss {
-  background: var(--bb-dn);
-  border-color: #800;
 }
 
 .bb-eq-peers {

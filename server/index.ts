@@ -2,11 +2,15 @@
  * Portfolio cache API: polls IBKR Flex, stores JSON in Redis, serves GET /api/portfolio.
  * Run: npx tsx server/index.ts  (or docker compose)
  */
+import 'dotenv/config'
 import cors from 'cors'
 import express from 'express'
 import { createClient } from 'redis'
 import type { IbkrFlexPortfolio } from '../src/services/finance/ibkrFlexTypes.ts'
-import { loadIbkrFlexPortfolio } from '../src/services/finance/ibkrFlexService.ts'
+import {
+  IBKR_FLEX_WEB_SERVICE_DEFAULT_BASE,
+  loadIbkrFlexPortfolio,
+} from '../src/services/finance/ibkrFlexService.ts'
 import {
   ensureBudgetTable,
   isBudgetDbConfigured,
@@ -19,7 +23,7 @@ const REDIS_KEY = process.env.PORTFOLIO_REDIS_KEY ?? 'dalali:portfolio:payload'
 const PORT = Number(process.env.PORT ?? process.env.PORTFOLIO_API_PORT ?? 8787)
 const POLL_MS = Math.max(10_000, Number(process.env.PORTFOLIO_POLL_MS ?? 120_000))
 const FLEX_BASE =
-  process.env.IBKR_FLEX_DIRECT_BASE?.trim() || 'https://gdcdyn.interactivebrokers.com/Universal/servlet'
+  process.env.IBKR_FLEX_DIRECT_BASE?.trim() || IBKR_FLEX_WEB_SERVICE_DEFAULT_BASE
 
 type CacheEnvelope = {
   ok: boolean
@@ -34,6 +38,15 @@ let redis: RedisC | null = null
 let pollTimer: ReturnType<typeof setInterval> | null = null
 let refreshInFlight = false
 
+/** Log target host:port only (no password). */
+function redisUrlForLog(raw: string): string {
+  const tls = /^rediss:\/\//i.test(raw)
+  const rest = raw.replace(/^rediss?:\/\//i, '')
+  const hostPort = (rest.includes('@') ? rest.split('@').pop() : rest) ?? rest
+  const hp = hostPort.split('/')[0] ?? hostPort
+  return `${tls ? 'rediss' : 'redis'}://${hp}`
+}
+
 async function getRedis(): Promise<RedisC> {
   if (redis?.isOpen) return redis
   const url = process.env.REDIS_URL?.trim() || 'redis://127.0.0.1:6379'
@@ -41,6 +54,7 @@ async function getRedis(): Promise<RedisC> {
   client.on('error', (err) => console.error('[redis]', err))
   await client.connect()
   redis = client
+  console.log('[redis] connected', redisUrlForLog(url))
   return redis
 }
 
@@ -189,7 +203,11 @@ app.put('/api/budget/:userId', async (req, res) => {
 app.get('/api/portfolio', async (_req, res) => {
   const cached = await readCache()
   if (!cached) {
-    res.json({ ok: false, error: 'No cache yet — waiting for first sync', cachedAt: null })
+    res.json({
+      ok: false,
+      error: 'No cache yet — server is fetching IBKR Flex and writing Redis; retry shortly',
+      cachedAt: null,
+    })
     return
   }
   res.json(cached)
