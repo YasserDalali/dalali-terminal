@@ -4,8 +4,16 @@ import { defineConfig, loadEnv } from 'vite'
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  const flexToken = env.VITE_IBKR_FLEX_TOKEN ?? env.IBKR_FLEX_TOKEN ?? ''
-  const flexQueryId = env.VITE_IBKR_FLEX_QUERY_ID ?? env.IBKR_FLEX_QUERY_ID ?? ''
+  // Never inline server-only IBKR_* into production — that enables browser Flex (/ibkr-flex) which 404s on Vercel.
+  // Prod: portfolio API (Render) + VITE_USE_PORTFOLIO_API=1, or explicit VITE_IBKR_* only if you accept token in bundle.
+  const flexToken =
+    mode === 'production'
+      ? (env.VITE_IBKR_FLEX_TOKEN ?? '')
+      : (env.VITE_IBKR_FLEX_TOKEN ?? env.IBKR_FLEX_TOKEN ?? '')
+  const flexQueryId =
+    mode === 'production'
+      ? (env.VITE_IBKR_FLEX_QUERY_ID ?? '')
+      : (env.VITE_IBKR_FLEX_QUERY_ID ?? env.IBKR_FLEX_QUERY_ID ?? '')
   const flexFixture = env.VITE_IBKR_FLEX_FIXTURE_URL ?? ''
 
   return {

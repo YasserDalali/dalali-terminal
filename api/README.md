@@ -16,12 +16,17 @@ From the repo root, `npm run server:dev` runs the same dev server.
 
 ## Deploy on Render
 
-1. New **Web Service** → connect this Git repo.
-2. **Root Directory**: `api`
-3. **Build command**: `npm install && npm run build`
-4. **Start command**: `npm start`
-5. **Environment**: add at least `IBKR_FLEX_TOKEN`, `IBKR_FLEX_QUERY_ID`, `REDIS_URL`. Render sets `PORT` automatically.
-6. Optional: `DATABASE_URL` for budget cloud, `PORTFOLIO_POLL_MS` (ms, min 10000), `PORTFOLIO_REDIS_KEY`.
+**Option A — Native Node (recommended)**  
+1. New **Web Service** → this repo, **Root Directory** = `api`.  
+2. **Environment** = **Node**.  
+3. **Build command**: `npm install && npm run build`  
+4. **Start command**: `npm start`  
+5. Add env: `IBKR_FLEX_TOKEN`, `IBKR_FLEX_QUERY_ID`, `REDIS_URL` (Render sets `PORT`).
+
+**Option B — Docker**  
+If the service is set to **Docker**, this folder now includes a `Dockerfile`. Keep **Root Directory** = `api` so Render finds `api/Dockerfile`. Do not use Docker at the repo root unless you add a root Dockerfile.
+
+Optional: `DATABASE_URL`, `PORTFOLIO_POLL_MS` (≥10000), `PORTFOLIO_REDIS_KEY`.
 
 ## Vercel (frontend)
 

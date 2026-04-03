@@ -362,6 +362,11 @@ export async function loadIbkrFlexPortfolio(
 ): Promise<IbkrFlexPortfolio> {
   const pollMs = options?.pollMs ?? 5000
   const flexBaseUrl = options?.flexBaseUrl
+  if (typeof window !== 'undefined' && import.meta.env.PROD && !flexBaseUrl) {
+    throw new Error(
+      'IBKR Flex cannot run from the browser in production (no /ibkr-flex proxy). Set VITE_USE_PORTFOLIO_API=1 and VITE_PORTFOLIO_API_BASE to your API URL on Vercel, with IBKR secrets only on the server.',
+    )
+  }
   const ref = await requestFlexReferenceCode(token, queryId, flexBaseUrl)
   let xml = await fetchFlexStatementXml(token, ref, pollMs, flexBaseUrl)
   try {

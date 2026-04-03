@@ -112,7 +112,8 @@ type PfMainTab = 'overview' | 'holdings'
 export function PortfolioPage() {
   const { token, queryId, fixtureUrl, usePortfolioApi, portfolioApiBase, portfolioPollMs } = getIbkrFlexEnv()
   const canApi = usePortfolioApi
-  const canLiveDirect = Boolean(token && queryId) && !canApi
+  // Browser Flex uses /ibkr-flex — only exists in Vite dev; production must use portfolio API (Render) or fixture.
+  const canLiveDirect = import.meta.env.DEV && Boolean(token && queryId) && !canApi
   const canFixture = Boolean(fixtureUrl) && !canApi
 
   const lifted = usePortfolioLifted()
@@ -171,7 +172,7 @@ export function PortfolioPage() {
         setLocalStatus('ok')
       } else {
         throw new Error(
-          'Configure .env: VITE_USE_PORTFOLIO_API=1 + portfolio API, or IBKR_FLEX_TOKEN + IBKR_FLEX_QUERY_ID, or VITE_IBKR_FLEX_FIXTURE_URL',
+          'Production needs VITE_USE_PORTFOLIO_API=1 and VITE_PORTFOLIO_API_BASE (your Render API). Local dev can use IBKR tokens + /ibkr-flex proxy, or VITE_IBKR_FLEX_FIXTURE_URL.',
         )
       }
     } catch (e) {
