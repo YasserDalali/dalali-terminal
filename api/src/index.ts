@@ -55,6 +55,17 @@ function redisUrlForLog(raw: string): string {
   return `${tls ? 'rediss' : 'redis'}://${hp}`
 }
 
+/** Render sets RENDER=true — there is no Redis on localhost there. */
+function assertRedisUrlWhenHosted(): void {
+  const onRender = process.env.RENDER === 'true'
+  if (onRender && !process.env.REDIS_URL?.trim()) {
+    console.error(
+      '[fatal] REDIS_URL is not set. On Render you must add your managed Redis URL (e.g. Redis Cloud) in Environment — not 127.0.0.1.',
+    )
+    process.exit(1)
+  }
+}
+
 async function getRedis(): Promise<RedisC> {
   if (redis?.isOpen) return redis
   const url = process.env.REDIS_URL?.trim() || 'redis://127.0.0.1:6379'
@@ -227,6 +238,7 @@ app.post('/api/portfolio/sync', async (_req, res) => {
 })
 
 async function main(): Promise<void> {
+  assertRedisUrlWhenHosted()
   await getRedis()
   if (isBudgetDbConfigured()) {
     try {

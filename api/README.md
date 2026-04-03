@@ -21,7 +21,7 @@ From the repo root, `npm run server:dev` runs the same dev server.
 2. **Environment** = **Node**.  
 3. **Build command**: `npm install && npm run build`  
 4. **Start command**: `npm start`  
-5. Add env: `IBKR_FLEX_TOKEN`, `IBKR_FLEX_QUERY_ID`, `REDIS_URL` (Render sets `PORT`).
+5. Add env: `IBKR_FLEX_TOKEN`, `IBKR_FLEX_QUERY_ID`, and **`REDIS_URL`** (required — use **Redis Cloud** or Upstash; there is no Redis on `127.0.0.1` on Render). Render sets `PORT` automatically.
 
 **Option B — Docker**  
 If the service is set to **Docker**, this folder now includes a `Dockerfile`. Keep **Root Directory** = `api` so Render finds `api/Dockerfile`. Do not use Docker at the repo root unless you add a root Dockerfile.
@@ -30,12 +30,9 @@ Optional: `DATABASE_URL`, `PORTFOLIO_POLL_MS` (≥10000), `PORTFOLIO_REDIS_KEY`.
 
 ## Vercel (frontend)
 
-In the Vite app project, set:
+The repo includes **`.env.production`** with `VITE_PORTFOLIO_API_BASE` pointing at the Render API so `vite build` (and Vercel) call `https://…onrender.com/api/...` instead of same-origin `/api` (which 404s on static hosting).
 
-- `VITE_USE_PORTFOLIO_API=1`
-- `VITE_PORTFOLIO_API_BASE=https://<your-service>.onrender.com` (no trailing slash)
-
-This base is used for both portfolio and budget API calls (`/api/portfolio`, `/api/budget/...`). CORS is open (`origin: true`).
+You can override with Vercel **Environment Variables** or a gitignored `.env.production.local`. CORS on the API is open (`origin: true`).
 
 ## IBKR Flex client copy
 
