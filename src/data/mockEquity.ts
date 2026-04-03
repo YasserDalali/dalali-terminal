@@ -1,3 +1,9 @@
+/** Normalize ticker for URLs and lookups (uppercase A–Z, 0–9, dot, hyphen). */
+export function normalizeEquitySymbol(raw: string): string {
+  const s = raw.replace(/[^A-Za-z0-9.-]/g, '').toUpperCase()
+  return s || 'MSFT'
+}
+
 /** Mock security — replace with API (e.g. FMP / Yahoo). */
 export const MOCK_EQUITY = {
   symbol: 'MSFT',
@@ -57,6 +63,8 @@ export const MOCK_EQUITY = {
   sourcesCount: 74,
   peers: ['AAPL', 'GOOGL', 'META', 'AMZN', 'ORCL'],
 }
+
+export type EquityDetailModel = typeof MOCK_EQUITY
 
 export const EQUITY_TABS = [
   'Overview',

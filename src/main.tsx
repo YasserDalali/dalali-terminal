@@ -1,10 +1,16 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { BrowserRouter } from 'react-router-dom'
 import './index.css'
 import App from './App.tsx'
+import { MarketDataProvider } from './services/market/marketDataStore'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <BrowserRouter>
+      <MarketDataProvider>
+        <App />
+      </MarketDataProvider>
+    </BrowserRouter>
   </StrictMode>,
 )

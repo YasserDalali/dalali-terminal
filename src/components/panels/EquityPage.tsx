@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react'
-import { EQUITY_TABS, MOCK_EQUITY, type EquityTab } from '../../data/mockEquity'
+import { EQUITY_TABS, type EquityTab } from '../../data/mockEquity'
+import { EquityLink } from '../EquityLink'
+import { useMarketData } from '../../services/market/marketDataStore'
 import { EquityAnalysisTab } from './equity/EquityAnalysisTab'
 import { EquityEarningsTab } from './equity/EquityEarningsTab'
 import { EquityFinancialsTab } from './equity/EquityFinancialsTab'
@@ -14,7 +16,7 @@ function formatUsd(n: number) {
 }
 
 export function EquityPage() {
-  const q = MOCK_EQUITY
+  const { equityDetail: q, equityChartCloses } = useMarketData()
   const [tab, setTab] = useState<EquityTab>('Overview')
   const [range, setRange] = useState<(typeof q.ranges)[number]>('1D')
 
@@ -46,7 +48,7 @@ export function EquityPage() {
       <header className="bb-eq-head">
         <div className="bb-eq-head__brand">
           <div className="bb-eq-logo" aria-hidden>
-            MS
+            {q.symbol.slice(0, 2)}
           </div>
           <div className="bb-eq-head__titles">
             <h1 className="bb-eq-head__name">{q.name}</h1>
@@ -121,7 +123,13 @@ export function EquityPage() {
             <section className="bb-eq-chart" aria-label="Price chart">
               <div className="bb-eq-chart__mock">
                 <div className="bb-eq-chart__grid" />
-                <EquityPriceChart prevClose={prevClose} price={q.price} up={up} seed={priceSeed} />
+                <EquityPriceChart
+                  prevClose={prevClose}
+                  price={q.price}
+                  up={up}
+                  seed={priceSeed}
+                  closes={equityChartCloses(range)}
+                />
                 <div className="bb-eq-chart__prev mono">
                   {Number.isFinite(prevClose) ? prevClose.toFixed(2) : q.price - q.change} PREV CLOSE
                 </div>
@@ -286,9 +294,9 @@ export function EquityPage() {
               <h2 className="bb-eq-side__ttl">PEERS</h2>
               <div className="bb-eq-peers">
                 {q.peers.map((p) => (
-                  <button key={p} type="button" className="bb-eq-peer mono">
+                  <EquityLink key={p} symbol={p} variant="pill" className="mono">
                     {p}
-                  </button>
+                  </EquityLink>
                 ))}
               </div>
             </section>

@@ -1,0 +1,36 @@
+# Portfolio API + Redis (IBKR Flex polling, JSON cache).
+# Usage:
+#   export IBKR_FLEX_TOKEN=... IBKR_FLEX_QUERY_ID=...
+#   docker compose up --build
+#
+# Frontend: set VITE_USE_PORTFOLIO_API=1 and VITE_PORTFOLIO_API_BASE=http://localhost:8787 (or proxy /api in prod).
+
+services:
+  redis:
+    build:
+      context: .
+      dockerfile: Dockerfile.redis
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+  portfolio-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8787:8787"
+    environment:
+      REDIS_URL: redis://redis:6379
+      PORTFOLIO_REDIS_KEY: ${PORTFOLIO_REDIS_KEY:-dalali:portfolio:payload}
+      PORTFOLIO_POLL_MS: ${PORTFOLIO_POLL_MS:-120000}
+      IBKR_FLEX_TOKEN: ${IBKR_FLEX_TOKEN}
+      IBKR_FLEX_QUERY_ID: ${IBKR_FLEX_QUERY_ID}
+      IBKR_FLEX_DIRECT_BASE: ${IBKR_FLEX_DIRECT_BASE:-https://gdcdyn.interactivebrokers.com/Universal/servlet}
+      IBKR_GETSTATEMENT_WAIT_MS: ${IBKR_GETSTATEMENT_WAIT_MS:-5000}
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+volumes:
+  redis-data:

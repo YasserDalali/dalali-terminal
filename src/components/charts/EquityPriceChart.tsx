@@ -1,5 +1,5 @@
 import { Area, AreaChart, ReferenceLine, ResponsiveContainer, XAxis, YAxis } from 'recharts'
-import { useId } from 'react'
+import { useId, useMemo } from 'react'
 
 function buildSeries(params: {
   n: number
@@ -33,10 +33,17 @@ export function EquityPriceChart(props: {
   up: boolean
   seed: number
   points?: number
+  /** Daily closes from feed; when ≥2 points, chart follows real history for the selected range. */
+  closes?: number[]
 }) {
-  const { prevClose, price, up, seed, points = 24 } = props
+  const { prevClose, price, up, seed, points = 24, closes } = props
   const id = useId()
-  const data = buildSeries({ n: points, start: prevClose, end: price, seed })
+  const data = useMemo(() => {
+    if (closes && closes.length >= 2) {
+      return closes.map((y, x) => ({ x, y }))
+    }
+    return buildSeries({ n: points, start: prevClose, end: price, seed })
+  }, [closes, points, prevClose, price, seed])
   const ys = data.map((d) => d.y)
   const min = Math.min(...ys)
   const max = Math.max(...ys)
