@@ -30,6 +30,20 @@ export const DEFAULT_WATCHLIST: WatchlistConfig[] = [
   { sym: 'META', name: 'META PLATFORMS', capHint: '1.5T', stooq: 'meta.us' },
 ]
 
+/** Daily move (±%) at which heatmap tile saturation reaches full intensity; legend uses the same scale. */
+export const HEATMAP_ABS_PCT_FULL_INTENSITY = 3
+
+export function heatmapTileOpacity(intensity: number): number {
+  return 0.45 + intensity * 0.48
+}
+
+export function heatmapTileBackground(up: boolean, intensity: number): string {
+  if (up) {
+    return `rgb(6, ${38 + Math.round(intensity * 100)}, 12)`
+  }
+  return `rgb(${42 + Math.round(intensity * 100)}, 8, 8)`
+}
+
 export const SECTOR_ETFS: { sym: string; stooq: string }[] = [
   { sym: 'XLK', stooq: 'xlk.us' },
   { sym: 'XLV', stooq: 'xlv.us' },

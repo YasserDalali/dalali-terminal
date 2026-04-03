@@ -5,7 +5,31 @@ import { EquityLink } from '../EquityLink'
 import { equityHref } from '../../navigation/equityRoutes'
 import { BRAND_ACRONYM } from '../../data/brand'
 import { StripSparkline } from '../charts/StripSparkline'
-import { EQUITY_CHART_RANGES } from '../../data/equityChartRanges'
+import {
+  DEFAULT_WATCHLIST_CHART_RANGE,
+  EQUITY_CHART_RANGES,
+  MARKETS_CLOCK_TICK_MS,
+  MARKETS_DEMO_KEY_METRICS,
+  MARKETS_DEMO_METRICS_SUBTITLE,
+  MARKETS_DEMO_METRICS_TITLE,
+  MARKETS_DEMO_PANEL_CAPTION_STYLE,
+  MARKETS_DEMO_SUMMARY_ITEMS,
+  MARKETS_DEMO_SUMMARY_SUBTITLE,
+  MARKETS_DEMO_SUMMARY_TITLE,
+  MARKETS_ERROR_TEXT_STYLE,
+  MARKETS_HEATMAP_SECTION_TITLE,
+  MARKETS_PRIMARY_REGION,
+  MARKETS_REFRESH_META_RECENT_SEC,
+  MARKETS_REGION_SELECT_TITLE,
+  MARKETS_SPARKLINE_EMPTY_STYLE,
+  MARKETS_WATCHLIST_LISTING_SUFFIX,
+  MARKETS_WATCHLIST_PAGE_SIZE,
+} from '../../data/marketsOverviewConfig'
+import {
+  HEATMAP_ABS_PCT_FULL_INTENSITY,
+  heatmapTileBackground,
+  heatmapTileOpacity,
+} from '../../services/market/marketConfig'
 import { useMarketData, type WatchlistRow } from '../../services/market/marketDataStore'
 
 function Pill({ children, positive }: { children: ReactNode; positive: boolean }) {
@@ -20,7 +44,7 @@ function formatRefreshMeta(lastUpdated: Date | null, tick: number): string {
   void tick
   if (!lastUpdated) return '—'
   const sec = Math.max(0, Math.floor((Date.now() - lastUpdated.getTime()) / 1000))
-  if (sec < 90) return `UPD ${sec}S`
+  if (sec < MARKETS_REFRESH_META_RECENT_SEC) return `UPD ${sec}S`
   return `UPD ${lastUpdated.toLocaleTimeString(undefined, { hour12: false })}`
 }
 
@@ -38,7 +62,7 @@ export function MarketsOverview() {
   )
 
   useEffect(() => {
-    const t = window.setInterval(() => setTick((n) => n + 1), 1000)
+    const t = window.setInterval(() => setTick((n) => n + 1), MARKETS_CLOCK_TICK_MS)
     return () => window.clearInterval(t)
   }, [])
 
@@ -54,7 +78,7 @@ export function MarketsOverview() {
               <EquityLink symbol={row.sym} onClick={(e) => e.stopPropagation()}>
                 {row.sym}
               </EquityLink>
-              {' US'}
+              {MARKETS_WATCHLIST_LISTING_SUFFIX}
             </span>
           </div>
         ),
@@ -113,16 +137,16 @@ export function MarketsOverview() {
             Retry
           </button>
         ) : null}
-        <label className="bb-workspace__fld" title="Watchlist and indices use US-listed Stooq symbols only">
+        <label className="bb-workspace__fld" title={MARKETS_REGION_SELECT_TITLE}>
           REGION
-          <select className="bb-sel" disabled value="US">
-            <option value="US">US</option>
+          <select className="bb-sel" disabled value={MARKETS_PRIMARY_REGION.code}>
+            <option value={MARKETS_PRIMARY_REGION.code}>{MARKETS_PRIMARY_REGION.label}</option>
           </select>
         </label>
       </div>
 
       {error ? (
-        <p className="mono muted" style={{ margin: '0.5rem 0 0', fontSize: '0.85rem' }}>
+        <p className="mono muted" style={MARKETS_ERROR_TEXT_STYLE}>
           {error}
         </p>
       ) : null}
@@ -147,7 +171,7 @@ export function MarketsOverview() {
                 {hasSpark ? (
                   <StripSparkline values={a.sparkCloses} up={displayUp} />
                 ) : (
-                  <span className="mono muted" style={{ fontSize: '0.7rem', alignSelf: 'center' }}>
+                  <span className="mono muted" style={MARKETS_SPARKLINE_EMPTY_STYLE}>
                     —
                   </span>
                 )}
@@ -160,69 +184,57 @@ export function MarketsOverview() {
       <div className="bb-split">
         <section className="bb-win">
           <header className="bb-win__bar">
-            <span className="bb-win__ttl">MARKET SUMMARY · DEMO</span>
+            <span className="bb-win__ttl">{MARKETS_DEMO_SUMMARY_TITLE}</span>
             <span className="bb-win__meta mono">{formatRefreshMeta(lastUpdated, tick)}</span>
           </header>
-          <p className="mono muted" style={{ margin: '0.35rem 0.75rem', fontSize: '0.75rem' }}>
-            Placeholder copy only — not wired to a news feed.
+          <p className="mono muted" style={MARKETS_DEMO_PANEL_CAPTION_STYLE}>
+            {MARKETS_DEMO_SUMMARY_SUBTITLE}
           </p>
           <ul className="bb-news">
-            <li className="bb-news__item bb-news__item--on">
-              <button type="button" className="bb-news__line bb-news__line--hot" disabled>
-                Equities firm as duration risk fades; megacap tech leads breadth recovery.
-              </button>
-              <p className="bb-news__body">
-                Futures track higher with rate-sensitive growth outperforming defensives. Flow data
-                shows systematic buying into the close; watch liquidity around key strikes.
-              </p>
-              <div className="bb-news__src">
-                <span className="mono">DEMO</span>
-              </div>
-            </li>
-            <li className="bb-news__item">
-              <button type="button" className="bb-news__line" disabled>
-                Credit spreads unchanged; IG demand steady into month-end.
-              </button>
-            </li>
-            <li className="bb-news__item">
-              <button type="button" className="bb-news__line" disabled>
-                Dollar index drifts; EM FX mixed on carry positioning.
-              </button>
-            </li>
+            {MARKETS_DEMO_SUMMARY_ITEMS.map((item, i) => (
+              <li
+                key={i}
+                className={`bb-news__item${item.hot ? ' bb-news__item--on' : ''}`}
+              >
+                <button
+                  type="button"
+                  className={`bb-news__line${item.hot ? ' bb-news__line--hot' : ''}`}
+                  disabled
+                >
+                  {item.line}
+                </button>
+                {item.body ? <p className="bb-news__body">{item.body}</p> : null}
+                {item.source ? (
+                  <div className="bb-news__src">
+                    <span className="mono">{item.source}</span>
+                  </div>
+                ) : null}
+              </li>
+            ))}
           </ul>
         </section>
 
         <section className="bb-win">
           <header className="bb-win__bar">
-            <span className="bb-win__ttl">KEY METRICS · DEMO</span>
+            <span className="bb-win__ttl">{MARKETS_DEMO_METRICS_TITLE}</span>
           </header>
-          <p className="mono muted" style={{ margin: '0.35rem 0.75rem', fontSize: '0.75rem' }}>
-            Sample numbers for layout — not live breadth or options data.
+          <p className="mono muted" style={MARKETS_DEMO_PANEL_CAPTION_STYLE}>
+            {MARKETS_DEMO_METRICS_SUBTITLE}
           </p>
           <div className="bb-metrics">
-            <div className="bb-metrics__row">
-              <span className="bb-metrics__k">ADV/DEC NYSE</span>
-              <span className="bb-metrics__v mono">1.84</span>
-            </div>
-            <div className="bb-metrics__row">
-              <span className="bb-metrics__k">PCT &gt;50DMA</span>
-              <span className="bb-metrics__v mono">58.2</span>
-            </div>
-            <div className="bb-metrics__row">
-              <span className="bb-metrics__k">HI/LO</span>
-              <span className="bb-metrics__v mono">1.12</span>
-            </div>
-            <div className="bb-metrics__row">
-              <span className="bb-metrics__k">P/C EQTY</span>
-              <span className="bb-metrics__v mono">0.91</span>
-            </div>
+            {MARKETS_DEMO_KEY_METRICS.map((row) => (
+              <div key={row.key} className="bb-metrics__row">
+                <span className="bb-metrics__k">{row.key}</span>
+                <span className="bb-metrics__v mono">{row.value}</span>
+              </div>
+            ))}
           </div>
         </section>
       </div>
 
       <section className="bb-win bb-win--wide">
         <header className="bb-win__bar">
-          <span className="bb-win__ttl">S&amp;P 500 HEATMAP</span>
+          <span className="bb-win__ttl">{MARKETS_HEATMAP_SECTION_TITLE}</span>
           <button type="button" className="bb-btn" disabled title="Not implemented">
             EXPAND
           </button>
@@ -236,10 +248,8 @@ export function MarketsOverview() {
                 unstyled
                 className="bb-heat__tile mono"
                 style={{
-                  opacity: 0.45 + t.intensity * 0.48,
-                  background: t.up
-                    ? `rgb(6, ${38 + Math.round(t.intensity * 100)}, 12)`
-                    : `rgb(${42 + Math.round(t.intensity * 100)}, 8, 8)`,
+                  opacity: heatmapTileOpacity(t.intensity),
+                  background: heatmapTileBackground(t.up, t.intensity),
                 }}
                 title={`${t.sym} ${t.changePct >= 0 ? '+' : ''}${t.changePct.toFixed(2)}%`}
               >
@@ -248,9 +258,9 @@ export function MarketsOverview() {
             ))}
           </div>
           <div className="bb-heat__leg">
-            <span className="mono muted">-3%</span>
+            <span className="mono muted">-{HEATMAP_ABS_PCT_FULL_INTENSITY}%</span>
             <div className="bb-heat__bar" />
-            <span className="mono muted">+3%</span>
+            <span className="mono muted">+{HEATMAP_ABS_PCT_FULL_INTENSITY}%</span>
             <span className="bb-heat__attr mono">{BRAND_ACRONYM}</span>
           </div>
         </div>
@@ -266,7 +276,7 @@ export function MarketsOverview() {
                 type="button"
                 role="tab"
                 disabled
-                className={`bb-tabs__t${r === '1M' ? ' bb-tabs__t--on' : ''}`}
+                className={`bb-tabs__t${r === DEFAULT_WATCHLIST_CHART_RANGE ? ' bb-tabs__t--on' : ''}`}
               >
                 {r}
               </button>
@@ -277,7 +287,7 @@ export function MarketsOverview() {
           rows={watchlist}
           columns={watchCols}
           rowKey={(row) => row.sym}
-          pageSize={10}
+          pageSize={MARKETS_WATCHLIST_PAGE_SIZE}
           searchPlaceholder="Search watchlist…"
           onRowClick={(row) => openEquity(row.sym)}
         />

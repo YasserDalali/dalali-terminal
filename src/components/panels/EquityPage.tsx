@@ -1,5 +1,12 @@
 import { useMemo, useState } from 'react'
 import { EQUITY_TABS, type EquityTab } from '../../data/equityTabs'
+import { EQUITY_PREV_CLOSE_LABEL } from '../../data/equityStatLabels'
+import {
+  EQUITY_ANALYST_TRACK_DEFAULT_PCT,
+  EQUITY_NON_OVERVIEW_TAB_NOTICE,
+  EQUITY_PRICE_CHART_SEED_MODULO,
+  EQUITY_TABWRAP_NOTE_STYLE,
+} from '../../data/equityUiConstants'
 import { EquityLink } from '../EquityLink'
 import { useMarketData } from '../../services/market/marketDataStore'
 import { formatUsd } from '../../utils/formatMoney'
@@ -23,12 +30,12 @@ export function EquityPage() {
   const targetTrack = useMemo(() => {
     const { targetLow, targetHigh, current } = q.analyst
     const span = targetHigh - targetLow
-    const p = span > 0 ? ((current - targetLow) / span) * 100 : 50
+    const p = span > 0 ? ((current - targetLow) / span) * 100 : EQUITY_ANALYST_TRACK_DEFAULT_PCT
     return { pct: Math.min(100, Math.max(0, p)), ...q.analyst }
   }, [q.analyst])
 
   const prevClose = useMemo(() => {
-    const raw = q.stats.find((s) => s.label === 'PREV CLOSE')?.value
+    const raw = q.stats.find((s) => s.label === EQUITY_PREV_CLOSE_LABEL)?.value
     const n = raw ? Number(raw) : NaN
     return Number.isFinite(n) ? n : q.price - q.change
   }, [q.stats, q.price, q.change])
@@ -37,7 +44,7 @@ export function EquityPage() {
     const s = q.symbol
     let n = 0
     for (let i = 0; i < s.length; i += 1) n += s.charCodeAt(i) * (i + 1)
-    return n % 1000
+    return n % EQUITY_PRICE_CHART_SEED_MODULO
   }, [q.symbol])
 
   return (
@@ -128,7 +135,8 @@ export function EquityPage() {
                   closes={equityChartCloses(range)}
                 />
                 <div className="bb-eq-chart__prev mono">
-                  {Number.isFinite(prevClose) ? prevClose.toFixed(2) : q.price - q.change} PREV CLOSE
+                  {Number.isFinite(prevClose) ? prevClose.toFixed(2) : q.price - q.change}{' '}
+                  {EQUITY_PREV_CLOSE_LABEL}
                 </div>
               </div>
             </section>
@@ -264,8 +272,8 @@ export function EquityPage() {
         </div>
       ) : (
         <div className="bb-eq-tabwrap">
-          <p className="mono muted" style={{ margin: '0 0 0.75rem', fontSize: '0.8rem' }}>
-            Demo / mock data for this tab — not tied to the selected ticker or a live API.
+          <p className="mono muted" style={EQUITY_TABWRAP_NOTE_STYLE}>
+            {EQUITY_NON_OVERVIEW_TAB_NOTICE}
           </p>
           {tab === 'Financials' && <EquityFinancialsTab />}
           {tab === 'Earnings' && <EquityEarningsTab />}

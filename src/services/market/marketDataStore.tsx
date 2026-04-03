@@ -12,6 +12,7 @@ import type { EquityDetailModel } from '../../data/mockEquity'
 import {
   DEFAULT_EQUITY_SYMBOL,
   DEFAULT_WATCHLIST,
+  HEATMAP_ABS_PCT_FULL_INTENSITY,
   INDEX_STRIP,
   SECTOR_ETFS,
 } from './marketConfig'
@@ -154,7 +155,7 @@ function buildHeatmap(series: Record<string, StooqOhlcvBar[]>): HeatTile[] {
     const t = lastTwoCloses(bars)
     const pct = t && t.prev !== 0 ? ((t.last - t.prev) / t.prev) * 100 : 0
     const up = pct >= 0
-    const intensity = Math.min(1, Math.abs(pct) / 3)
+    const intensity = Math.min(1, Math.abs(pct) / HEATMAP_ABS_PCT_FULL_INTENSITY)
     return { sym, changePct: pct, up, intensity }
   })
 }

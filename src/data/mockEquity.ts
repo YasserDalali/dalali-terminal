@@ -1,4 +1,5 @@
 import { EQUITY_CHART_RANGES } from './equityChartRanges'
+import { EQUITY_PREV_CLOSE_LABEL } from './equityStatLabels'
 
 /** Mock security — replace with API (e.g. FMP / Yahoo). */
 export const MOCK_EQUITY = {
@@ -13,7 +14,7 @@ export const MOCK_EQUITY = {
   currency: 'USD',
   ranges: EQUITY_CHART_RANGES,
   stats: [
-    { label: 'PREV CLOSE', value: '412.38' },
+    { label: EQUITY_PREV_CLOSE_LABEL, value: '412.38' },
     { label: 'MKT CAP', value: '3.09T' },
     { label: 'OPEN', value: '413.50' },
     { label: 'P/E (TTM)', value: '36.2' },
