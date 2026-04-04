@@ -1,6 +1,7 @@
-import { createChart, LineSeries, LineStyle } from 'lightweight-charts'
 import { useEffect, useRef } from 'react'
-import { lcLastPriceOff, sparklineChartOptions } from '../../charts/lightweight/terminalLightweightTheme'
+import type { EChartsType } from 'echarts/core'
+import { bbEchartsBase } from '../../charts/echarts/bbEchartsTheme'
+import { echarts } from '../../charts/echarts/initEcharts'
 import { syntheticBusinessDaySeries } from '../../charts/lightweight/timeFormat'
 
 function parseY(v: string | null | undefined): number | null {
@@ -19,6 +20,7 @@ export function FinancialSparkline(props: {
 }) {
   const { values, estimateFromIndex } = props
   const wrapRef = useRef<HTMLDivElement>(null)
+  const chartRef = useRef<EChartsType | null>(null)
 
   useEffect(() => {
     const el = wrapRef.current
@@ -28,46 +30,63 @@ export function FinancialSparkline(props: {
     const finite = ys.filter((v): v is number => v != null)
     if (finite.length < 2) return
 
-    const times = syntheticBusinessDaySeries(values.length)
+    const cats = syntheticBusinessDaySeries(values.length)
     const first = ys.find((v) => v != null)
     const last = [...ys].reverse().find((v) => v != null)
     const isUp = first != null && last != null ? last >= first : true
     const mainColor = isUp ? '#0f0' : '#f44'
-
-    const chart = createChart(el, { ...sparklineChartOptions(), autoSize: true })
-    const solid = chart.addSeries(LineSeries, {
-      color: mainColor,
-      lineWidth: 2,
-      lineStyle: LineStyle.Solid,
-      ...lcLastPriceOff,
-    })
-    const est = chart.addSeries(LineSeries, {
-      color: '#ffcc00',
-      lineWidth: 2,
-      lineStyle: LineStyle.Dashed,
-      ...lcLastPriceOff,
-    })
-
     const split = estimateFromIndex ?? values.length
-    solid.setData(
-      times
-        .map((time, i) => ({ time, value: i < split ? ys[i]! : undefined }))
-        .filter((d): d is { time: string; value: number } => d.value != null),
-    )
-    if (estimateFromIndex != null && estimateFromIndex < values.length) {
-      est.setData(
-        times
-          .map((time, i) => ({ time, value: i >= split ? ys[i]! : undefined }))
-          .filter((d): d is { time: string; value: number } => d.value != null),
-      )
-    } else {
-      est.setData([])
-    }
 
-    chart.timeScale().fitContent()
+    const solidData = cats.map((_, i) => {
+      if (i >= split) return '-'
+      const y = ys[i]
+      return y == null ? '-' : y
+    })
+    const estData = cats.map((_, i) => {
+      if (i < split) return '-'
+      const y = ys[i]
+      return y == null ? '-' : y
+    })
 
+    const chart = echarts.init(el, undefined, { renderer: 'canvas' })
+    chartRef.current = chart
+
+    chart.setOption({
+      ...bbEchartsBase,
+      grid: { left: 0, right: 0, top: 1, bottom: 0 },
+      xAxis: { type: 'category', data: cats, show: false, boundaryGap: false },
+      yAxis: { type: 'value', show: false, scale: true },
+      tooltip: { show: false },
+      series: [
+        {
+          type: 'line',
+          name: 'actual',
+          symbol: 'none',
+          lineStyle: { width: 2, color: mainColor },
+          connectNulls: false,
+          data: solidData,
+        },
+        ...(estimateFromIndex != null
+          ? [
+              {
+                type: 'line' as const,
+                name: 'est',
+                symbol: 'none',
+                lineStyle: { width: 2, color: '#ffcc00', type: 'dashed' as const },
+                connectNulls: false,
+                data: estData,
+              },
+            ]
+          : []),
+      ],
+    })
+
+    const ro = new ResizeObserver(() => chart.resize())
+    ro.observe(el)
     return () => {
-      chart.remove()
+      ro.disconnect()
+      chart.dispose()
+      chartRef.current = null
     }
   }, [estimateFromIndex, values])
 

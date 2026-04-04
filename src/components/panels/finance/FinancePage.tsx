@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import type { FinanceProfileInput } from '../../../services/finance/types'
 import { getDefaultDemoProfile, loadDemoProfile } from '../../../services/storage/localStorageStore'
 import { getDefaultDemoPersonalStatements, loadPersonalStatements } from '../../../services/storage/personalStatementsStore'
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
+import { TwoSlicePie } from '../../charts/echarts/TwoSlicePie'
 
 function formatMoney(n: number) {
   if (!Number.isFinite(n)) return '—'
@@ -141,22 +141,12 @@ export function FinancePage() {
             <div className="bb-fin-chartCard">
               <div className="bb-fin-chartCard__ttl">assets vs liabilities</div>
               <div className="bb-fin-miniChart">
-                <ResponsiveContainer width="100%" height={116}>
-                  <PieChart>
-                    <Pie
-                      data={stmtComposition}
-                      dataKey="value"
-                      nameKey="name"
-                      innerRadius={24}
-                      outerRadius={46}
-                      stroke="#111"
-                    >
-                      <Cell fill="#0f0" />
-                      <Cell fill="#f44" />
-                    </Pie>
-                    <Tooltip formatter={(v) => formatMoney(Number(v ?? 0))} />
-                  </PieChart>
-                </ResponsiveContainer>
+                <TwoSlicePie
+                  rows={stmtComposition}
+                  colors={['#0f0', '#f44']}
+                  formatTooltip={formatMoney}
+                  height={116}
+                />
               </div>
             </div>
           </article>

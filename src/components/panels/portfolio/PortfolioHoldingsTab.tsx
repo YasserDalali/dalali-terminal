@@ -1,24 +1,15 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import {
-  Bar,
-  BarChart,
-  Cell,
-  LabelList,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Sankey,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts'
 import type { IbkrFlexPortfolio, IbkrNavHistoryPoint, IbkrPositionRow } from '../../../services/finance/ibkrFlexTypes'
 import { equitySectorForSymbol } from './portfolioSectorMap'
-import { positiveScalarDomain } from './portfolioChartUtils'
 import { aggregateHoldingsBuckets, buildAllocationSankey } from './portfolioHoldingsBuckets'
+import {
+  HoldingsDonutChart,
+  HoldingsSankeyChart,
+  HoldingsSectorBarChart,
+} from './HoldingsChartsECharts'
 import { FinDataTableShell } from '../../fin/FinDataTable'
 import { PortfolioHoldingRow } from './PortfolioHoldingRow'
-import { formatUsd, formatUsdMoney } from './portfolioFormat'
+import { formatUsdMoney } from './portfolioFormat'
 
 const PIE_COLORS = ['#378ADD', '#ff6600', '#7F77DD', '#1D9E75', '#D85A30', '#E24B4A', '#BA7517', '#639922']
 
@@ -56,41 +47,6 @@ function PieBreakdownList({ rows, pctBase }: { rows: { name: string; value: numb
       ))}
     </ul>
   )
-}
-
-/** On-slice labels (name + % of NAV) without relying on hover */
-function makePieLabel(navTotal: number) {
-  return (props: {
-    cx?: number
-    cy?: number
-    midAngle?: number
-    innerRadius?: number
-    outerRadius?: number
-    name?: string
-    value?: number
-  }) => {
-    const { cx = 0, cy = 0, midAngle = 0, innerRadius = 0, outerRadius = 0, name = '', value = 0 } = props
-    if (!navTotal || !Number.isFinite(value) || value <= 0) return null
-    const pct = (value / navTotal) * 100
-    if (pct < 2.5) return null
-    const rad = (Math.PI / 180) * midAngle
-    const r = innerRadius + (outerRadius - innerRadius) * 0.55
-    const x = cx + r * Math.cos(-rad)
-    const y = cy + r * Math.sin(-rad)
-    return (
-      <text
-        x={x}
-        y={y}
-        fill="#eaeaea"
-        textAnchor={x > cx ? 'start' : 'end'}
-        dominantBaseline="central"
-        fontSize={10}
-        style={{ pointerEvents: 'none' }}
-      >
-        {`${name} ${pct.toFixed(1)}%`}
-      </text>
-    )
-  }
 }
 
 function SankeyFlowLegend({
@@ -272,16 +228,6 @@ export function PortfolioHoldingsTab(props: {
     return Math.min(720, Math.max(300, 72 + n * 20))
   }, [sankeyData])
 
-  const sectorBarDomain = useMemo(
-    () => positiveScalarDomain(
-      sectorBars.map((b) => b.value),
-      false,
-    ),
-    [sectorBars],
-  )
-
-  const pieAnimOff = { isAnimationActive: false as const }
-
   const donutBlock = (
     title: string,
     pieRows: { name: string; value: number }[],
@@ -292,28 +238,7 @@ export function PortfolioHoldingsTab(props: {
       <div className="bb-pf-donut">
         {pieRows.length > 0 ? (
           <>
-            <ResponsiveContainer width="100%" height={260}>
-              <PieChart>
-                <Pie
-                  data={pieRows}
-                  dataKey="value"
-                  nameKey="name"
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={52}
-                  outerRadius={88}
-                  paddingAngle={1}
-                  label={makePieLabel(navForPct)}
-                  labelLine={false}
-                  {...pieAnimOff}
-                >
-                  {pieRows.map((_, i) => (
-                    <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]!} stroke="#111" />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(v) => formatUsdMoney(Number(v ?? 0))} />
-              </PieChart>
-            </ResponsiveContainer>
+            <HoldingsDonutChart rows={pieRows} navForPct={navForPct} height={260} />
             <PieBreakdownList rows={pieRows} pctBase={navForPct} />
           </>
         ) : (
@@ -391,19 +316,11 @@ export function PortfolioHoldingsTab(props: {
             {sankeyData && sankeyData.links.length > 0 ? (
               <>
                 <div className="bb-pf-sankey">
-                  <ResponsiveContainer width="100%" height={sankeyHeight}>
-                    <Sankey
-                      data={sankeyData}
-                      nodePadding={24}
-                      nodeWidth={14}
-                      iterations={64}
-                      link={{ stroke: '#a08020', strokeOpacity: 0.45 }}
-                      node={{ fill: '#2a2a2a', stroke: '#555' }}
-                      margin={{ top: 16, right: 32, bottom: 16, left: 32 }}
-                    >
-                      <Tooltip formatter={(v) => formatUsdMoney(Number(v ?? 0))} />
-                    </Sankey>
-                  </ResponsiveContainer>
+                  <HoldingsSankeyChart
+                    nodes={sankeyData.nodes}
+                    links={sankeyData.links}
+                    height={sankeyHeight}
+                  />
                 </div>
                 <SankeyFlowLegend nodes={sankeyData.nodes} links={sankeyData.links} navTotal={navTotal} />
               </>
@@ -416,38 +333,10 @@ export function PortfolioHoldingsTab(props: {
             <div className="bb-pf-barChart">
               {sectorBars.length > 0 ? (
                 <>
-                  <ResponsiveContainer width="100%" height={Math.max(120, sectorBars.length * 36)}>
-                    <BarChart
-                      layout="vertical"
-                      data={sectorBars}
-                      margin={{ top: 4, right: 56, left: 8, bottom: 4 }}
-                    >
-                      <XAxis
-                        type="number"
-                        tick={{ fill: '#888', fontSize: 10 }}
-                        tickFormatter={(x) => formatUsd(Number(x))}
-                        domain={sectorBarDomain ?? [0, 'auto']}
-                      />
-                      <YAxis type="category" dataKey="name" width={120} tick={{ fill: '#aaa', fontSize: 10 }} />
-                      <Tooltip formatter={(v) => formatUsdMoney(Number(v ?? 0))} />
-                      <Bar dataKey="value" radius={[0, 2, 2, 0]} isAnimationActive={false}>
-                        {sectorBars.map((_, i) => (
-                          <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]!} />
-                        ))}
-                        <LabelList
-                          dataKey="value"
-                          position="right"
-                          fill="#ccc"
-                          fontSize={10}
-                          className="mono"
-                          formatter={(v) => {
-                            const n = Number(v)
-                            return Number.isFinite(n) ? formatUsd(n) : ''
-                          }}
-                        />
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
+                  <HoldingsSectorBarChart
+                    sectorBars={sectorBars}
+                    height={Math.max(120, sectorBars.length * 36)}
+                  />
                   <PieBreakdownList
                     rows={sectorBars.map((s) => ({ name: s.name, value: s.value }))}
                     pctBase={sectorBars.reduce((a, s) => a + s.value, 0)}

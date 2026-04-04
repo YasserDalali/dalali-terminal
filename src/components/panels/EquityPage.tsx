@@ -11,6 +11,7 @@ import {
 import { normalizeEquitySymbol } from '../../data/equitySymbol'
 import { EquityLink } from '../EquityLink'
 import { useMarketData } from '../../services/market/marketDataStore'
+import { sliceOhlcvForRange } from '../../services/market/marketEquityModel'
 import { formatUsd } from '../../utils/formatMoney'
 import { EquityAnalysisTab } from './equity/EquityAnalysisTab'
 import { EquityEarningsTab } from './equity/EquityEarningsTab'
@@ -190,6 +191,7 @@ export function EquityPage() {
                     up={up}
                     seed={priceSeed}
                     closes={equityChartCloses(range)}
+                    ohlcv={sliceOhlcvForRange(equityBars, range)}
                   />
                 ) : (
                   <div className="bb-eq-chart__empty mono muted">

@@ -15,12 +15,11 @@
     "dev:stack": "concurrently -n web,api -c blue,magenta \"vite\" \"npm run dev --prefix api\""
   },
   "dependencies": {
+    "echarts": "^5.6.0",
     "fast-xml-parser": "^5.5.10",
-    "lightweight-charts": "^5.1.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "react-router-dom": "^7.14.0",
-    "recharts": "^3.8.1"
+    "react-router-dom": "^7.14.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",

@@ -1,17 +1,7 @@
-import {
-  AreaSeries,
-  ColorType,
-  createChart,
-  createSeriesMarkers,
-  createTextWatermark,
-  LineSeries,
-  LineStyle,
-  PriceScaleMode,
-  type Time,
-} from 'lightweight-charts'
 import { useEffect, useRef } from 'react'
-import { lcLastPriceOff, terminalChartOptions } from '../../charts/lightweight/terminalLightweightTheme'
-import { flexYmdToTimeString, timeToIsoDay } from '../../charts/lightweight/timeFormat'
+import type { EChartsType } from 'echarts/core'
+import { bbEchartsBase, bbTooltip } from '../../charts/echarts/bbEchartsTheme'
+import { echarts } from '../../charts/echarts/initEcharts'
 import type { NavSeriesVisibility } from './portfolioChartUtils'
 import { formatUsd } from './portfolioFormat'
 
@@ -48,34 +38,34 @@ type Props = {
   perfYDomain?: [number, number]
 }
 
-function buildTooltipHtml(
-  chartMode: 'nav' | 'perf',
-  dateLabel: string,
+function navTooltipFormatter(
+  axisIdx: number,
+  navRows: PortfolioNavChartRow[],
   navLines: NavSeriesVisibility,
-  row: PortfolioNavChartRow | null,
-  perfRow: PortfolioPerfChartRow | null,
+): string {
+  const row = navRows[axisIdx]
+  if (!row) return ''
+  const bits = [`<div style="font-weight:600;margin-bottom:4px">${row.dateLabel}</div>`]
+  if (navLines.total) bits.push(`<div>Total: <span style="color:#0f0">${formatUsd(row.total)}</span></div>`)
+  if (navLines.stock) bits.push(`<div>Stock: <span style="color:#ff6600">${formatUsd(row.stock)}</span></div>`)
+  if (navLines.cash) bits.push(`<div>Cash: <span style="color:#7F77DD">${formatUsd(row.cash)}</span></div>`)
+  return bits.join('')
+}
+
+function perfTooltipFormatter(
+  perfRow: PortfolioPerfChartRow,
   benchOn: Record<string, boolean>,
   benchmarks: PortfolioBenchDef[],
 ): string {
-  if (chartMode === 'nav' && row) {
-    const bits: string[] = [`<div style="font-weight:600;margin-bottom:4px">${dateLabel}</div>`]
-    if (navLines.total) bits.push(`<div>Total: <span style="color:#0f0">${formatUsd(row.total)}</span></div>`)
-    if (navLines.stock) bits.push(`<div>Stock: <span style="color:#ff6600">${formatUsd(row.stock)}</span></div>`)
-    if (navLines.cash) bits.push(`<div>Cash: <span style="color:#7F77DD">${formatUsd(row.cash)}</span></div>`)
-    return bits.join('')
+  const bits = [`<div style="font-weight:600;margin-bottom:4px">${perfRow.dateLabel}</div>`]
+  bits.push(`<div>Port: <span style="color:#f44">${perfRow.portPct.toFixed(2)}%</span></div>`)
+  for (const b of benchmarks) {
+    if (!benchOn[b.id]) continue
+    const v = perfRow[`${b.id}Pct` as keyof PortfolioPerfChartRow]
+    if (typeof v === 'number')
+      bits.push(`<div>${b.short}: <span style="color:${b.color}">${v.toFixed(2)}%</span></div>`)
   }
-  if (chartMode === 'perf' && perfRow) {
-    const bits: string[] = [`<div style="font-weight:600;margin-bottom:4px">${dateLabel}</div>`]
-    bits.push(`<div>Port: <span style="color:#f44">${perfRow.portPct.toFixed(2)}%</span></div>`)
-    for (const b of benchmarks) {
-      if (!benchOn[b.id]) continue
-      const v = perfRow[`${b.id}Pct` as keyof PortfolioPerfChartRow]
-      if (typeof v === 'number')
-        bits.push(`<div>${b.short}: <span style="color:${b.color}">${v.toFixed(2)}%</span></div>`)
-    }
-    return bits.join('')
-  }
-  return ''
+  return bits.join('')
 }
 
 export function PortfolioLightweightChart(props: Props) {
@@ -93,6 +83,7 @@ export function PortfolioLightweightChart(props: Props) {
   } = props
 
   const wrapRef = useRef<HTMLDivElement>(null)
+  const chartRef = useRef<EChartsType | null>(null)
 
   useEffect(() => {
     const el = wrapRef.current
@@ -100,254 +91,198 @@ export function PortfolioLightweightChart(props: Props) {
     if (chartMode === 'nav' && navRows.length === 0) return
     if (chartMode === 'perf' && perfRows.length === 0) return
 
-    el.style.position = 'relative'
+    const chart = echarts.init(el, undefined, { renderer: 'canvas' })
+    chartRef.current = chart
 
-    const labelByKey = new Map<string, string>()
-    if (chartMode === 'nav') {
-      for (const r of navRows) labelByKey.set(flexYmdToTimeString(r.sortKey), r.dateLabel)
-    } else {
-      for (const r of perfRows) labelByKey.set(flexYmdToTimeString(r.sortKey), r.dateLabel)
+    const graphicWatermark = {
+      type: 'text' as const,
+      left: 'center',
+      top: 'middle',
+      style: {
+        text: chartMode === 'nav' ? 'NAV' : 'PERF %',
+        fontSize: 52,
+        fill: 'rgba(55,55,55,0.14)',
+        fontWeight: 'normal',
+      },
+      z: -1,
     }
 
-    const chart = createChart(
-      el,
-      terminalChartOptions({
-        autoSize: true,
-        layout: {
-          background: { type: ColorType.Solid, color: '#080808' },
+    if (chartMode === 'nav') {
+      const cats = navRows.map((r) => r.dateLabel)
+
+      const yAxis: object = {
+        type: logScale ? ('log' as const) : ('value' as const),
+        scale: !truncated || !navYDomain,
+        min: truncated && navYDomain ? navYDomain[0] : undefined,
+        max: truncated && navYDomain ? navYDomain[1] : undefined,
+        axisLine: { lineStyle: { color: '#444' } },
+        splitLine: { lineStyle: { color: '#222' } },
+        axisLabel: { color: '#888', formatter: (v: number) => formatUsd(v) },
+        logBase: 10,
+      }
+
+      chart.setOption({
+        ...bbEchartsBase,
+        graphic: [graphicWatermark],
+        grid: { left: 52, right: 10, top: 20, bottom: 48 },
+        xAxis: {
+          type: 'category',
+          data: cats,
+          axisLine: { lineStyle: { color: '#444' } },
+          axisLabel: { color: '#888', fontSize: 9, rotate: cats.length > 14 ? 32 : 0 },
         },
-        localization: {
-          dateFormat: 'dd MMM yy',
-          priceFormatter: (p: number) =>
-            chartMode === 'nav'
-              ? formatUsd(p)
-              : `${Number(p).toFixed(2)}%`,
-          timeFormatter: (t: Time) => labelByKey.get(timeToIsoDay(t)) ?? '',
-        },
-        timeScale: {
-          borderVisible: true,
-          fixLeftEdge: false,
-          fixRightEdge: false,
-          tickMarkFormatter: (time: Time) => {
-            const lbl = labelByKey.get(timeToIsoDay(time))
-            if (lbl) return lbl
-            return null
+        yAxis,
+        dataZoom: [
+          { type: 'inside', xAxisIndex: 0, filterMode: 'none' },
+          {
+            type: 'slider',
+            xAxisIndex: 0,
+            height: 14,
+            bottom: 6,
+            filterMode: 'none',
+            borderColor: '#444',
+            handleStyle: { color: '#ff6600' },
+            textStyle: { fontSize: 9, color: '#888' },
+          },
+        ],
+        tooltip: {
+          ...bbTooltip,
+          trigger: 'axis',
+          axisPointer: { type: 'cross', crossStyle: { color: '#555' } },
+          formatter: (items: unknown) => {
+            const arr = Array.isArray(items) ? items : [items]
+            const idx = (arr[0] as { dataIndex?: number } | undefined)?.dataIndex
+            if (idx == null) return ''
+            return navTooltipFormatter(idx, navRows, navLines)
           },
         },
-      }),
-    )
-
-    const pane = chart.panes()[0]
-    if (pane) {
-      createTextWatermark(pane, {
-        horzAlign: 'center',
-        vertAlign: 'center',
-        lines: [
+        series: [
           {
-            text: chartMode === 'nav' ? 'NAV' : 'PERF %',
-            color: 'rgba(55,55,55,0.14)',
-            fontSize: 52,
-            fontStyle: '',
+            type: 'line',
+            name: 'Total NAV',
+            show: navLines.total,
+            showSymbol: false,
+            data: navRows.map((r) => r.total),
+            lineStyle: { width: 2, color: '#0f0' },
+            areaStyle: {
+              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                { offset: 0, color: 'rgba(0,255,80,0.22)' },
+                { offset: 1, color: 'rgba(0,0,0,0)' },
+              ]),
+            },
+          },
+          {
+            type: 'line',
+            name: 'Stock',
+            show: navLines.stock,
+            showSymbol: false,
+            data: navRows.map((r) => r.stock),
+            lineStyle: { width: 2, color: '#ff6600' },
+          },
+          {
+            type: 'line',
+            name: 'Cash',
+            show: navLines.cash,
+            showSymbol: false,
+            data: navRows.map((r) => r.cash),
+            lineStyle: { width: 2, color: '#7F77DD' },
           },
         ],
       })
-    }
-
-    const tip = document.createElement('div')
-    tip.style.cssText = [
-      'position:absolute',
-      'z-index:4',
-      'display:none',
-      'pointer-events:none',
-      'left:0',
-      'top:0',
-      'max-width:220px',
-      'padding:8px 10px',
-      'font-size:11px',
-      'line-height:1.35',
-      'background:#111',
-      'border:1px solid #444',
-      'color:#ddd',
-      'font-family:ui-monospace,monospace',
-    ].join(';')
-    el.appendChild(tip)
-
-    if (chartMode === 'nav') {
-      const times = navRows.map((r) => flexYmdToTimeString(r.sortKey))
-
-      const totalArea = chart.addSeries(AreaSeries, {
-        lineColor: '#0f0',
-        topColor: 'rgba(16,255,16,0.22)',
-        bottomColor: 'rgba(0,0,0,0)',
-        lineWidth: 2,
-        lineStyle: LineStyle.Solid,
-        title: 'Total NAV',
-        ...lcLastPriceOff,
-        priceLineVisible: false,
-        lastValueVisible: true,
-      })
-      totalArea.setData(times.map((time, i) => ({ time, value: navRows[i]!.total })))
-      totalArea.applyOptions({ visible: navLines.total })
-
-      const stockLine = chart.addSeries(LineSeries, {
-        color: '#ff6600',
-        lineWidth: 2,
-        title: 'Stock',
-        ...lcLastPriceOff,
-      })
-      stockLine.setData(times.map((time, i) => ({ time, value: navRows[i]!.stock })))
-      stockLine.applyOptions({ visible: navLines.stock })
-
-      const cashLine = chart.addSeries(LineSeries, {
-        color: '#7F77DD',
-        lineWidth: 2,
-        title: 'Cash',
-        ...lcLastPriceOff,
-      })
-      cashLine.setData(times.map((time, i) => ({ time, value: navRows[i]!.cash })))
-      cashLine.applyOptions({ visible: navLines.cash })
-
-      const lastT = times[times.length - 1]
-      if (lastT && navLines.total) {
-        createSeriesMarkers(totalArea, [
-          {
-            time: lastT,
-            position: 'inBar',
-            color: '#0f0',
-            shape: 'circle',
-            size: 1,
-          },
-        ])
-      }
-
-      chart.priceScale('right').applyOptions({
-        mode: logScale ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal,
-        autoScale: !(truncated && navYDomain),
-      })
-      if (truncated && navYDomain) {
-        chart.priceScale('right').setVisibleRange({ from: navYDomain[0], to: navYDomain[1] })
-      }
     } else {
-      const times = perfRows.map((r) => flexYmdToTimeString(r.sortKey))
+      const cats = perfRows.map((r) => r.dateLabel)
 
-      const portArea = chart.addSeries(AreaSeries, {
-        lineColor: '#f44',
-        topColor: 'rgba(255,68,68,0.28)',
-        bottomColor: 'rgba(0,0,0,0)',
-        lineWidth: 2,
-        title: 'Portfolio %',
-        ...lcLastPriceOff,
-      })
-      portArea.setData(times.map((time, i) => ({ time, value: perfRows[i]!.portPct })))
-
-      portArea.createPriceLine({
-        price: 0,
-        color: '#555',
-        lineWidth: 1,
-        lineStyle: LineStyle.Dashed,
-        axisLabelVisible: true,
-        title: '0%',
-      })
-
-      const lastT = times[times.length - 1]
-      if (lastT) {
-        createSeriesMarkers(portArea, [
+      chart.setOption({
+        ...bbEchartsBase,
+        graphic: [graphicWatermark],
+        grid: { left: 48, right: 10, top: 20, bottom: 48 },
+        xAxis: {
+          type: 'category',
+          data: cats,
+          axisLine: { lineStyle: { color: '#444' } },
+          axisLabel: { color: '#888', fontSize: 9, rotate: cats.length > 14 ? 32 : 0 },
+        },
+        yAxis: {
+          type: 'value',
+          scale: !truncated || !perfYDomain,
+          min: truncated && perfYDomain ? perfYDomain[0] : undefined,
+          max: truncated && perfYDomain ? perfYDomain[1] : undefined,
+          axisLine: { lineStyle: { color: '#444' } },
+          splitLine: { lineStyle: { color: '#222' } },
+          axisLabel: { color: '#888', formatter: (v: number) => `${v.toFixed(1)}%` },
+        },
+        dataZoom: [
+          { type: 'inside', xAxisIndex: 0, filterMode: 'none' },
           {
-            time: lastT,
-            position: 'inBar',
-            color: '#f44',
-            shape: 'circle',
-            size: 1,
+            type: 'slider',
+            xAxisIndex: 0,
+            height: 14,
+            bottom: 6,
+            filterMode: 'none',
+            borderColor: '#444',
+            handleStyle: { color: '#ff6600' },
+            textStyle: { fontSize: 9, color: '#888' },
           },
-        ])
-      }
-
-      for (const b of benchmarks) {
-        if (!benchOn[b.id]) continue
-        const line = chart.addSeries(LineSeries, {
-          color: b.color,
-          lineWidth: 2,
-          lineStyle: LineStyle.Solid,
-          title: `${b.short} %`,
-          ...lcLastPriceOff,
-        })
-        const pts: ({ time: string } | { time: string; value: number })[] = []
-        for (let i = 0; i < perfRows.length; i += 1) {
-          const t = times[i]!
-          const v = perfRows[i]![`${b.id}Pct` as keyof PortfolioPerfChartRow]
-          if (typeof v === 'number' && Number.isFinite(v)) pts.push({ time: t, value: v })
-          else pts.push({ time: t })
-        }
-        line.setData(pts)
-      }
-
-      chart.priceScale('right').applyOptions({
-        mode: PriceScaleMode.Normal,
-        autoScale: !(truncated && perfYDomain),
+        ],
+        tooltip: {
+          ...bbTooltip,
+          trigger: 'axis',
+          axisPointer: { type: 'cross' },
+          formatter: (items: unknown) => {
+            const arr = Array.isArray(items) ? items : [items]
+            const idx = (arr[0] as { dataIndex?: number } | undefined)?.dataIndex
+            if (idx == null) return ''
+            return perfTooltipFormatter(perfRows[idx]!, benchOn, benchmarks)
+          },
+        },
+        series: (() => {
+          const out: object[] = [
+            {
+              type: 'line',
+              name: 'Portfolio %',
+              showSymbol: false,
+              data: perfRows.map((r) => r.portPct),
+              lineStyle: { width: 2, color: '#f44' },
+              areaStyle: {
+                color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                  { offset: 0, color: 'rgba(255,68,68,0.28)' },
+                  { offset: 1, color: 'rgba(0,0,0,0)' },
+                ]),
+              },
+              markLine: {
+                silent: true,
+                symbol: 'none',
+                lineStyle: { type: 'dashed', color: '#555' },
+                data: [{ yAxis: 0 }],
+                label: { formatter: '0%', fontSize: 9, color: '#888' },
+              },
+            },
+          ]
+          for (const b of benchmarks) {
+            if (!benchOn[b.id]) continue
+            out.push({
+              type: 'line',
+              name: `${b.short} %`,
+              showSymbol: false,
+              connectNulls: false,
+              lineStyle: { width: 2, color: b.color },
+              data: perfRows.map((row) => {
+                const v = row[`${b.id}Pct` as keyof PortfolioPerfChartRow]
+                return typeof v === 'number' && Number.isFinite(v) ? v : '-'
+              }),
+            })
+          }
+          return out
+        })(),
       })
-      if (truncated && perfYDomain) {
-        chart.priceScale('right').setVisibleRange({ from: perfYDomain[0], to: perfYDomain[1] })
-      }
     }
 
-    chart.timeScale().fitContent()
-
-    const rowByKeyNav = new Map<string, PortfolioNavChartRow>()
-    const rowByKeyPerf = new Map<string, PortfolioPerfChartRow>()
-    if (chartMode === 'nav') {
-      for (const r of navRows) rowByKeyNav.set(flexYmdToTimeString(r.sortKey), r)
-    } else {
-      for (const r of perfRows) rowByKeyPerf.set(flexYmdToTimeString(r.sortKey), r)
-    }
-
-    chart.subscribeCrosshairMove((param) => {
-      if (!param.point || param.point.x < 0 || param.point.y < 0 || param.time == null) {
-        tip.style.display = 'none'
-        return
-      }
-      const key = timeToIsoDay(param.time)
-      const dateLabel = labelByKey.get(key) ?? key
-      const html =
-        chartMode === 'nav'
-          ? buildTooltipHtml(
-              'nav',
-              dateLabel,
-              navLines,
-              rowByKeyNav.get(key) ?? null,
-              null,
-              benchOn,
-              benchmarks,
-            )
-          : buildTooltipHtml(
-              'perf',
-              dateLabel,
-              navLines,
-              null,
-              rowByKeyPerf.get(key) ?? null,
-              benchOn,
-              benchmarks,
-            )
-      if (!html) {
-        tip.style.display = 'none'
-        return
-      }
-      tip.innerHTML = html
-      tip.style.display = 'block'
-      const pad = 12
-      let x = param.point.x + pad
-      let y = param.point.y + pad
-      const tw = tip.offsetWidth
-      const th = tip.offsetHeight
-      const cw = el.clientWidth
-      const ch = el.clientHeight
-      if (x + tw > cw) x = Math.max(pad, cw - tw - pad)
-      if (y + th > ch) y = Math.max(pad, ch - th - pad)
-      tip.style.transform = `translate(${x}px, ${y}px)`
-    })
-
+    const ro = new ResizeObserver(() => chart.resize())
+    ro.observe(el)
     return () => {
-      tip.remove()
-      chart.remove()
+      ro.disconnect()
+      chart.dispose()
+      chartRef.current = null
     }
   }, [
     benchOn,

@@ -4,6 +4,7 @@ import { FinDataTable, type FinDataTableCol } from '../fin/FinDataTable'
 import { EquityLink } from '../EquityLink'
 import { equityPath } from '../../routes/modulePaths'
 import { BRAND_ACRONYM } from '../../data/brand'
+import { MarketsSectorHeatmap } from '../charts/MarketsSectorHeatmap'
 import { StripSparkline } from '../charts/StripSparkline'
 import {
   DEFAULT_WATCHLIST_CHART_RANGE,
@@ -25,11 +26,7 @@ import {
   MARKETS_WATCHLIST_LISTING_SUFFIX,
   MARKETS_WATCHLIST_PAGE_SIZE,
 } from '../../data/marketsOverviewConfig'
-import {
-  HEATMAP_ABS_PCT_FULL_INTENSITY,
-  heatmapTileBackground,
-  heatmapTileOpacity,
-} from '../../services/market/marketConfig'
+import { HEATMAP_ABS_PCT_FULL_INTENSITY } from '../../services/market/marketConfig'
 import { useMarketData, type WatchlistRow } from '../../services/market/marketDataStore'
 import { MarketsMacroStrip } from './MarketsMacroStrip'
 
@@ -258,34 +255,7 @@ export function MarketsOverview() {
           </button>
         </header>
         <div className="bb-heat">
-          <div className="bb-heat__grid">
-            {heatmap.map((t) => (
-              <EquityLink
-                key={t.sym}
-                symbol={t.sym}
-                unstyled
-                className={`bb-heat__tile mono${t.unavailable ? ' bb-heat__tile--na' : ''}`}
-                style={
-                  t.unavailable || t.changePct == null
-                    ? {
-                        opacity: 0.4,
-                        background: 'rgba(48, 52, 58, 0.85)',
-                      }
-                    : {
-                        opacity: heatmapTileOpacity(t.intensity),
-                        background: heatmapTileBackground(t.up, t.intensity),
-                      }
-                }
-                title={
-                  t.unavailable || t.changePct == null
-                    ? `${t.sym} — no data`
-                    : `${t.sym} ${t.changePct >= 0 ? '+' : ''}${t.changePct.toFixed(2)}%`
-                }
-              >
-                {t.sym}
-              </EquityLink>
-            ))}
-          </div>
+          <MarketsSectorHeatmap tiles={heatmap} onSymClick={openEquity} />
           <div className="bb-heat__leg">
             <span className="mono muted">-{HEATMAP_ABS_PCT_FULL_INTENSITY}%</span>
             <div className="bb-heat__bar" />

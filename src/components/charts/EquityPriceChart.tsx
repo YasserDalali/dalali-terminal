@@ -1,32 +1,30 @@
-import {
-  AreaSeries,
-  ColorType,
-  createChart,
-  createTextWatermark,
-  LineStyle,
-} from 'lightweight-charts'
 import { useEffect, useRef } from 'react'
-import { lcLastPriceOff, terminalChartOptions } from './lightweight/terminalLightweightTheme'
-import { syntheticBusinessDaySeries } from './lightweight/timeFormat'
+import type { EChartsType } from 'echarts/core'
+import type { DailyOhlcvBar } from '../../services/market/dailyBarTypes'
+import { bbEchartsBase, areaGradientColors } from './echarts/bbEchartsTheme'
+import { echarts } from './echarts/initEcharts'
+import { flexYmdToTimeString, syntheticBusinessDaySeries } from './lightweight/timeFormat'
 
-function buildSeries(params: { n: number; start: number; end: number; seed: number }) {
+function buildSyntheticCloses(params: { n: number; start: number; end: number; seed: number }) {
   const { n, start, end, seed } = params
-  if (n <= 1) return [{ x: 0, y: end }]
-
+  if (n <= 1) return [{ y: end }]
   const baseSpan = end - start
   const amp = Math.abs(baseSpan) * 0.18 + Math.abs(end) * 0.002
-
-  const arr: { x: number; y: number }[] = []
+  const arr: { y: number }[] = []
   for (let i = 0; i < n; i += 1) {
     const t = i / (n - 1)
     const wobble = Math.sin(i * 0.85 + seed * 0.01) * Math.cos(i * 0.23 + seed * 0.03)
     const trend = baseSpan * t
-    const y = start + trend + wobble * amp
-    arr.push({ x: i, y })
+    arr.push({ y: start + trend + wobble * amp })
   }
-  arr[0] = { x: 0, y: start }
-  arr[arr.length - 1] = { x: n - 1, y: end }
+  arr[0] = { y: start }
+  arr[arr.length - 1] = { y: end }
   return arr
+}
+
+function isoFromBarDate(dateYmd: string): string {
+  if (/^\d{8}$/.test(dateYmd)) return flexYmdToTimeString(dateYmd)
+  return dateYmd.slice(0, 10)
 }
 
 export function EquityPriceChart(props: {
@@ -35,83 +33,175 @@ export function EquityPriceChart(props: {
   up: boolean
   seed: number
   points?: number
-  /** Daily closes from feed; when ≥2 points, chart follows real history for the selected range. */
   closes?: number[]
+  ohlcv?: DailyOhlcvBar[]
 }) {
-  const { prevClose, price, up, seed, points = 24, closes } = props
+  const { prevClose, price, up, seed, points = 24, closes, ohlcv } = props
   const wrapRef = useRef<HTMLDivElement>(null)
+  const chartRef = useRef<EChartsType | null>(null)
 
   useEffect(() => {
     const el = wrapRef.current
     if (!el) return
 
-    const seriesPoints =
-      closes && closes.length >= 2
-        ? closes.map((y, x) => ({ x, y }))
-        : buildSeries({ n: points, start: prevClose, end: price, seed })
-
     const stroke = up ? '#0f0' : '#f44'
-    const topColor = up ? 'rgba(16, 255, 16, 0.28)' : 'rgba(255, 68, 68, 0.28)'
+    const [g0, g1] = areaGradientColors(up)
+    const useCandles = ohlcv && ohlcv.length >= 2
 
-    const chart = createChart(
-      el,
-      terminalChartOptions({
-        autoSize: true,
-        layout: {
-          background: { type: ColorType.Solid, color: '#050505' },
-        },
-        localization: {
-          priceFormatter: (p: number) => (Number.isFinite(p) ? p.toFixed(2) : ''),
-        },
-        crosshair: {
-          horzLine: { labelVisible: true },
-          vertLine: { labelVisible: true },
-        },
-      }),
-    )
+    const graphicWatermark = {
+      type: 'text' as const,
+      left: 'center',
+      top: 'middle',
+      style: {
+        text: 'DALALI',
+        fontSize: 56,
+        fill: 'rgba(60,60,60,0.12)',
+        fontWeight: 'normal',
+      },
+      z: -1,
+    }
 
-    const pane = chart.panes()[0]
-    if (pane) {
-      createTextWatermark(pane, {
-        horzAlign: 'center',
-        vertAlign: 'center',
-        lines: [{ text: 'DALALI', color: 'rgba(60,60,60,0.12)', fontSize: 56, fontStyle: '' }],
+    const chart = echarts.init(el, undefined, { renderer: 'canvas' })
+    chartRef.current = chart
+
+    if (useCandles) {
+      const cats = ohlcv!.map((b) => isoFromBarDate(b.dateYmd))
+      const candleData = ohlcv!.map((b) => [b.open, b.close, b.low, b.high])
+      chart.setOption({
+        ...bbEchartsBase,
+        animationDuration: 400,
+        graphic: [graphicWatermark],
+        grid: { left: 48, right: 12, top: 16, bottom: 56 },
+        xAxis: {
+          type: 'category',
+          data: cats,
+          boundaryGap: true,
+          axisLine: { lineStyle: { color: '#444' } },
+          axisLabel: { color: '#888', fontSize: 9, rotate: cats.length > 40 ? 45 : 0 },
+        },
+        yAxis: {
+          scale: true,
+          axisLine: { lineStyle: { color: '#444' } },
+          splitLine: { lineStyle: { color: '#222' } },
+          axisLabel: { color: '#888', formatter: (v: number) => v.toFixed(2) },
+        },
+        dataZoom: [
+          { type: 'inside', xAxisIndex: 0, filterMode: 'none' },
+          {
+            type: 'slider',
+            xAxisIndex: 0,
+            height: 18,
+            bottom: 8,
+            filterMode: 'none',
+            borderColor: '#444',
+            handleStyle: { color: '#ff6600' },
+            textStyle: { color: '#888', fontSize: 9 },
+          },
+        ],
+        series: [
+          {
+            type: 'candlestick',
+            name: 'OHLC',
+            itemStyle: {
+              color: '#14b143',
+              color0: '#ef232a',
+              borderColor: '#14b143',
+              borderColor0: '#ef232a',
+            },
+            data: candleData,
+            markLine: {
+              silent: true,
+              symbol: 'none',
+              lineStyle: { type: 'dashed', color: '#666', width: 1 },
+              data: [{ yAxis: prevClose }],
+              label: { show: true, formatter: 'prev', color: '#888', fontSize: 9 },
+            },
+          },
+        ],
+      })
+    } else {
+      const seriesPts =
+        closes && closes.length >= 2
+          ? closes.map((y) => ({ y }))
+          : buildSyntheticCloses({ n: points, start: prevClose, end: price, seed })
+      const cats = syntheticBusinessDaySeries(seriesPts.length)
+      const vals = seriesPts.map((p) => p.y)
+      const vmin = Math.min(...vals, prevClose)
+      const vmax = Math.max(...vals, prevClose)
+
+      chart.setOption({
+        ...bbEchartsBase,
+        animationDuration: 400,
+        graphic: [graphicWatermark],
+        grid: { left: 44, right: 8, top: 12, bottom: 52 },
+        xAxis: {
+          type: 'category',
+          data: cats,
+          boundaryGap: false,
+          axisLine: { lineStyle: { color: '#444' } },
+          axisLabel: { color: '#888', fontSize: 9, show: false },
+        },
+        yAxis: {
+          scale: true,
+          min: vmin - (vmax - vmin) * 0.06,
+          max: vmax + (vmax - vmin) * 0.06,
+          axisLine: { lineStyle: { color: '#444' } },
+          splitLine: { lineStyle: { color: '#222' } },
+          axisLabel: { color: '#888', formatter: (v: number) => v.toFixed(2) },
+        },
+        visualMap: {
+          show: false,
+          min: vmin,
+          max: vmax,
+          dimension: 1,
+          inRange: { color: [stroke, up ? '#7fdf7f' : '#ff8888'] },
+        },
+        dataZoom: [
+          { type: 'inside', xAxisIndex: 0 },
+          {
+            type: 'slider',
+            xAxisIndex: 0,
+            height: 16,
+            bottom: 6,
+            borderColor: '#444',
+            handleStyle: { color: '#ff6600' },
+            textStyle: { color: '#888', fontSize: 9 },
+          },
+        ],
+        series: [
+          {
+            type: 'line',
+            smooth: 0.2,
+            symbol: 'none',
+            lineStyle: { width: 2, color: stroke },
+            areaStyle: {
+              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                { offset: 0, color: g0 },
+                { offset: 1, color: g1 },
+              ]),
+            },
+            data: vals,
+            markLine: {
+              silent: true,
+              symbol: 'none',
+              lineStyle: { type: 'dashed', color: '#666' },
+              data: [{ yAxis: prevClose }],
+              label: { formatter: 'prev', color: '#888', fontSize: 9 },
+            },
+          },
+        ],
       })
     }
 
-    const area = chart.addSeries(AreaSeries, {
-      lineColor: stroke,
-      topColor,
-      bottomColor: 'rgba(0,0,0,0)',
-      lineWidth: 2,
-      lineStyle: LineStyle.Solid,
-      ...lcLastPriceOff,
-      priceFormat: { type: 'price', minMove: 0.01, precision: 2 },
-    })
-
-    const times = syntheticBusinessDaySeries(seriesPoints.length)
-    area.setData(
-      times.map((time, i) => ({
-        time,
-        value: seriesPoints[i]!.y,
-      })),
-    )
-
-    area.createPriceLine({
-      price: prevClose,
-      color: '#666',
-      lineWidth: 1,
-      lineStyle: LineStyle.Dashed,
-      axisLabelVisible: true,
-      title: 'prev',
-    })
-
-    chart.timeScale().fitContent()
+    const ro = new ResizeObserver(() => chart.resize())
+    ro.observe(el)
 
     return () => {
-      chart.remove()
+      ro.disconnect()
+      chart.dispose()
+      chartRef.current = null
     }
-  }, [closes, points, prevClose, price, seed, up])
+  }, [closes, ohlcv, points, prevClose, price, seed, up])
 
   return <div ref={wrapRef} className="bb-eq-chart__chart" aria-hidden="true" />
 }

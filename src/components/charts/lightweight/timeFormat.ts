@@ -1,7 +1,4 @@
-import type { BusinessDay, Time, UTCTimestamp } from 'lightweight-charts'
-import { isBusinessDay } from 'lightweight-charts'
-
-/** IBKR / Flex style YYYYMMDD → Lightweight Charts business day string. */
+/** IBKR / Flex style YYYYMMDD → ISO day string for chart axes. */
 export function flexYmdToTimeString(sortKey: string): string {
   const s = sortKey.trim()
   if (/^\d{8}$/.test(s)) {
@@ -10,21 +7,7 @@ export function flexYmdToTimeString(sortKey: string): string {
   return s
 }
 
-/** Stable string key for matching custom tick / crosshair labels. */
-export function timeToIsoDay(t: Time): string {
-  if (typeof t === 'string') return t
-  if (typeof t === 'number') {
-    const d = new Date((t as UTCTimestamp) * 1000)
-    return d.toISOString().slice(0, 10)
-  }
-  if (isBusinessDay(t)) {
-    const b = t as BusinessDay
-    return `${b.year}-${String(b.month).padStart(2, '0')}-${String(b.day).padStart(2, '0')}`
-  }
-  return String(t)
-}
-
-/** Consecutive UTC calendar days as `YYYY-MM-DD` (for synthetic / index series). */
+/** Consecutive UTC calendar days as `YYYY-MM-DD` (synthetic series / placeholders). */
 export function syntheticBusinessDaySeries(n: number, startUtc = Date.UTC(2024, 0, 1)): string[] {
   const out: string[] = []
   const d = new Date(startUtc)

@@ -1,36 +1,53 @@
-import { createChart, LineSeries, LineStyle } from 'lightweight-charts'
 import { useEffect, useRef } from 'react'
-import { lcLastPriceOff, sparklineChartOptions } from './lightweight/terminalLightweightTheme'
+import type { EChartsType } from 'echarts/core'
+import { bbEchartsBase, areaGradientColors } from './echarts/bbEchartsTheme'
+import { echarts } from './echarts/initEcharts'
 import { syntheticBusinessDaySeries } from './lightweight/timeFormat'
-
-function buildSeries(values: number[]) {
-  return values.map((y, i) => ({ x: i, y }))
-}
 
 export function StripSparkline(props: { values: number[]; up: boolean }) {
   const { values, up } = props
   const wrapRef = useRef<HTMLDivElement>(null)
+  const chartRef = useRef<EChartsType | null>(null)
 
   useEffect(() => {
     const el = wrapRef.current
-    if (!el) return
+    if (!el || values.length < 2) return
 
     const stroke = up ? '#0f0' : '#f44'
-    const chart = createChart(el, { ...sparklineChartOptions(), autoSize: true })
-    const line = chart.addSeries(LineSeries, {
-      color: stroke,
-      lineWidth: 2,
-      lineStyle: LineStyle.Solid,
-      ...lcLastPriceOff,
+    const [g0, g1] = areaGradientColors(up)
+    const cats = syntheticBusinessDaySeries(values.length)
+
+    const chart = echarts.init(el, undefined, { renderer: 'canvas' })
+    chartRef.current = chart
+
+    chart.setOption({
+      ...bbEchartsBase,
+      grid: { left: 0, right: 0, top: 2, bottom: 0 },
+      xAxis: { type: 'category', data: cats, show: false, boundaryGap: false },
+      yAxis: { type: 'value', show: false, scale: true },
+      tooltip: { show: false },
+      series: [
+        {
+          type: 'line',
+          symbol: 'none',
+          lineStyle: { width: 2, color: stroke },
+          areaStyle: {
+            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+              { offset: 0, color: g0 },
+              { offset: 1, color: g1 },
+            ]),
+          },
+          data: values,
+        },
+      ],
     })
 
-    const data = buildSeries(values)
-    const times = syntheticBusinessDaySeries(data.length)
-    line.setData(times.map((time, i) => ({ time, value: data[i]!.y })))
-    chart.timeScale().fitContent()
-
+    const ro = new ResizeObserver(() => chart.resize())
+    ro.observe(el)
     return () => {
-      chart.remove()
+      ro.disconnect()
+      chart.dispose()
+      chartRef.current = null
     }
   }, [up, values])
 
