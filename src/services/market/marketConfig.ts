@@ -1,18 +1,19 @@
-/** Stooq-backed symbols for markets + equity watch defaults. */
+/** US tickers for Tiingo (via portfolio API). Index strip uses liquid ETF proxies. */
 
 export type IndexStripConfig = {
   id: string
   /** Header label in the strip */
   label: string
-  stooq: string
+  /** Tiingo / API symbol */
+  symbol: string
   inverse?: boolean
 }
 
 export const INDEX_STRIP: IndexStripConfig[] = [
-  { id: 'spx', label: 'SPX INDEX', stooq: '^spx' },
-  { id: 'ndx', label: 'NDX INDEX', stooq: '^ndx' },
-  { id: 'dji', label: 'DJI INDEX', stooq: '^dji' },
-  { id: 'vix', label: 'VIX INDEX', stooq: '^vix', inverse: true },
+  { id: 'spx', label: 'S&P 500', symbol: 'SPY' },
+  { id: 'ndx', label: 'NASDAQ 100', symbol: 'QQQ' },
+  { id: 'dji', label: 'DOW', symbol: 'DIA' },
+  { id: 'vix', label: 'VIX', symbol: 'VIX', inverse: true },
 ]
 
 export type WatchlistConfig = {
@@ -20,14 +21,13 @@ export type WatchlistConfig = {
   name: string
   /** Optional display when fundamentals are not from feed */
   capHint?: string
-  stooq: string
 }
 
 export const DEFAULT_WATCHLIST: WatchlistConfig[] = [
-  { sym: 'AAPL', name: 'APPLE INC', capHint: '3.6T', stooq: 'aapl.us' },
-  { sym: 'MSFT', name: 'MICROSOFT CP', capHint: '3.1T', stooq: 'msft.us' },
-  { sym: 'NVDA', name: 'NVIDIA CORP', capHint: '3.2T', stooq: 'nvda.us' },
-  { sym: 'META', name: 'META PLATFORMS', capHint: '1.5T', stooq: 'meta.us' },
+  { sym: 'AAPL', name: 'APPLE INC', capHint: '3.6T' },
+  { sym: 'MSFT', name: 'MICROSOFT CP', capHint: '3.1T' },
+  { sym: 'NVDA', name: 'NVIDIA CORP', capHint: '3.2T' },
+  { sym: 'META', name: 'META PLATFORMS', capHint: '1.5T' },
 ]
 
 /** Daily move (±%) at which heatmap tile saturation reaches full intensity; legend uses the same scale. */
@@ -44,15 +44,15 @@ export function heatmapTileBackground(up: boolean, intensity: number): string {
   return `rgb(${42 + Math.round(intensity * 100)}, 8, 8)`
 }
 
-export const SECTOR_ETFS: { sym: string; stooq: string }[] = [
-  { sym: 'XLK', stooq: 'xlk.us' },
-  { sym: 'XLV', stooq: 'xlv.us' },
-  { sym: 'XLF', stooq: 'xlf.us' },
-  { sym: 'XLE', stooq: 'xle.us' },
-  { sym: 'XLY', stooq: 'xly.us' },
-  { sym: 'XLI', stooq: 'xli.us' },
-  { sym: 'XLP', stooq: 'xlp.us' },
-  { sym: 'XLU', stooq: 'xlu.us' },
+export const SECTOR_ETFS: { sym: string }[] = [
+  { sym: 'XLK' },
+  { sym: 'XLV' },
+  { sym: 'XLF' },
+  { sym: 'XLE' },
+  { sym: 'XLY' },
+  { sym: 'XLI' },
+  { sym: 'XLP' },
+  { sym: 'XLU' },
 ]
 
 export const DEFAULT_EQUITY_SYMBOL = 'MSFT'
@@ -64,7 +64,7 @@ export type EquityListingMeta = {
   peers: string[]
 }
 
-/** Static listing text; prices come from Stooq. */
+/** Static listing; prices from Tiingo via API. */
 export const EQUITY_LISTING: Record<string, EquityListingMeta> = {
   AAPL: {
     name: 'Apple Inc.',

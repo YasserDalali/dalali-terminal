@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useParams } from 'react-router-dom'
 import { EQUITY_TABS, type EquityTab } from '../../data/equityTabs'
 import { EQUITY_PREV_CLOSE_LABEL } from '../../data/equityStatLabels'
 import {
@@ -7,6 +8,7 @@ import {
   EQUITY_PRICE_CHART_SEED_MODULO,
   EQUITY_TABWRAP_NOTE_STYLE,
 } from '../../data/equityUiConstants'
+import { normalizeEquitySymbol } from '../../data/equitySymbol'
 import { EquityLink } from '../EquityLink'
 import { useMarketData } from '../../services/market/marketDataStore'
 import { formatUsd } from '../../utils/formatMoney'
@@ -20,15 +22,34 @@ import { InlineBold } from './equity/InlineBold'
 import { EquityPriceChart } from '../charts/EquityPriceChart'
 
 export function EquityPage() {
-  const { equityDetail: q, equityChartCloses } = useMarketData()
+  const { symbol: rawSymbol } = useParams<{ symbol: string }>()
+  const {
+    setEquitySymbol,
+    equityDetail: q,
+    equityBars,
+    equityChartCloses,
+    loading: marketLoading,
+    error: marketError,
+    partialWarning: marketPartial,
+    refresh: refreshMarket,
+  } = useMarketData()
+
+  useEffect(() => {
+    if (!rawSymbol) return
+    setEquitySymbol(normalizeEquitySymbol(decodeURIComponent(rawSymbol)))
+  }, [rawSymbol, setEquitySymbol])
   const [tab, setTab] = useState<EquityTab>('Overview')
   const [range, setRange] = useState<(typeof q.ranges)[number]>('1D')
 
-  const up = q.change >= 0
-  const ahUp = q.afterHours.change >= 0
+  const liveOk = Number.isFinite(q.price)
+  const up = liveOk && q.change >= 0
+  const ahUp = liveOk && q.afterHours.change >= 0
 
   const targetTrack = useMemo(() => {
     const { targetLow, targetHigh, current } = q.analyst
+    if (!Number.isFinite(current) || !Number.isFinite(targetLow) || !Number.isFinite(targetHigh)) {
+      return { pct: 0, ...q.analyst }
+    }
     const span = targetHigh - targetLow
     const p = span > 0 ? ((current - targetLow) / span) * 100 : EQUITY_ANALYST_TRACK_DEFAULT_PCT
     return { pct: Math.min(100, Math.max(0, p)), ...q.analyst }
@@ -86,23 +107,58 @@ export function EquityPage() {
         ))}
       </nav>
 
+      {!liveOk && !marketLoading ? (
+        <div className="bb-eq-feedwarn mono" role="status">
+          {marketError ? (
+            <>
+              <strong>Market data error.</strong> {marketError}{' '}
+              <button type="button" className="bb-btn" onClick={() => void refreshMarket()}>
+                Retry
+              </button>
+            </>
+          ) : (
+            <span>
+              No Tiingo prices for this symbol yet. Confirm portfolio API is running and{' '}
+              <span className="mono">TIINGO_API_TOKEN</span> is set.
+            </span>
+          )}
+          {marketPartial ? <div className="muted">{marketPartial}</div> : null}
+        </div>
+      ) : null}
+
       {tab === 'Overview' ? (
         <div className="bb-eq-layout">
           <div className="bb-eq-main">
             <section className="bb-eq-priceblk">
               <div className="bb-eq-priceblk__row">
-                <span className={`bb-eq-px mono${up ? ' pos' : ' neg'}`}>{formatUsd(q.price)}</span>
-                <span className={`mono bb-eq-ch ${up ? 'pos' : 'neg'}`}>
-                  {up ? '+' : ''}
-                  {formatUsd(q.change)} ({up ? '+' : ''}
-                  {q.changePct.toFixed(2)}%)
+                <span className={`bb-eq-px mono${liveOk ? (up ? ' pos' : ' neg') : ''}`}>
+                  {liveOk ? formatUsd(q.price) : marketLoading ? '…' : '—'}
+                </span>
+                <span className={`mono bb-eq-ch ${liveOk ? (up ? 'pos' : 'neg') : ''}`}>
+                  {liveOk ? (
+                    <>
+                      {up ? '+' : ''}
+                      {formatUsd(q.change)} ({up ? '+' : ''}
+                      {q.changePct.toFixed(2)}%)
+                    </>
+                  ) : marketLoading ? (
+                    'Loading…'
+                  ) : (
+                    '—'
+                  )}
                 </span>
               </div>
               <div className="bb-eq-ah">
                 <span className="muted">AH </span>
-                <span className={`mono ${ahUp ? 'pos' : 'neg'}`}>
-                  {formatUsd(q.afterHours.price)} ({ahUp ? '+' : ''}
-                  {q.afterHours.changePct.toFixed(2)}%)
+                <span className={`mono ${liveOk ? (ahUp ? 'pos' : 'neg') : ''}`}>
+                  {liveOk ? (
+                    <>
+                      {formatUsd(q.afterHours.price)} ({ahUp ? '+' : ''}
+                      {q.afterHours.changePct.toFixed(2)}%)
+                    </>
+                  ) : (
+                    '—'
+                  )}
                 </span>
                 <span className="muted"> · {q.afterHours.time}</span>
               </div>
@@ -127,16 +183,21 @@ export function EquityPage() {
             <section className="bb-eq-chart" aria-label="Price chart">
               <div className="bb-eq-chart__mock">
                 <div className="bb-eq-chart__grid" />
-                <EquityPriceChart
-                  prevClose={prevClose}
-                  price={q.price}
-                  up={up}
-                  seed={priceSeed}
-                  closes={equityChartCloses(range)}
-                />
+                {liveOk ? (
+                  <EquityPriceChart
+                    prevClose={prevClose}
+                    price={q.price}
+                    up={up}
+                    seed={priceSeed}
+                    closes={equityChartCloses(range)}
+                  />
+                ) : (
+                  <div className="bb-eq-chart__empty mono muted">
+                    {marketLoading ? 'Loading chart…' : 'Chart unavailable without Tiingo EOD data.'}
+                  </div>
+                )}
                 <div className="bb-eq-chart__prev mono">
-                  {Number.isFinite(prevClose) ? prevClose.toFixed(2) : q.price - q.change}{' '}
-                  {EQUITY_PREV_CLOSE_LABEL}
+                  {Number.isFinite(prevClose) ? prevClose.toFixed(2) : '—'} {EQUITY_PREV_CLOSE_LABEL}
                 </div>
               </div>
             </section>
@@ -275,12 +336,12 @@ export function EquityPage() {
           <p className="mono muted" style={EQUITY_TABWRAP_NOTE_STYLE}>
             {EQUITY_NON_OVERVIEW_TAB_NOTICE}
           </p>
-          {tab === 'Financials' && <EquityFinancialsTab />}
-          {tab === 'Earnings' && <EquityEarningsTab />}
-          {tab === 'Holders' && <EquityHoldersTab />}
-          {tab === 'Historical' && <EquityHistoricalTab />}
-          {tab === 'Analysis' && <EquityAnalysisTab />}
-          {tab === 'Relations' && <EquityRelationsTab />}
+          {tab === 'Financials' && <EquityFinancialsTab symbol={q.symbol} />}
+          {tab === 'Earnings' && <EquityEarningsTab symbol={q.symbol} />}
+          {tab === 'Holders' && <EquityHoldersTab symbol={q.symbol} />}
+          {tab === 'Historical' && <EquityHistoricalTab symbol={q.symbol} bars={equityBars} />}
+          {tab === 'Analysis' && <EquityAnalysisTab symbol={q.symbol} />}
+          {tab === 'Relations' && <EquityRelationsTab symbol={q.symbol} peers={q.peers} />}
         </div>
       )}
     </div>

@@ -5,7 +5,7 @@ import { NAV_MODULES } from '../data/modules'
 interface TopBarProps {
   activeModule: ModuleId
   onModuleChange: (id: ModuleId) => void
-  /** True when Stooq market data loaded successfully (see status bar). */
+  /** True when Tiingo market data loaded successfully (see status bar). */
   feedOk: boolean
 }
 
@@ -31,9 +31,9 @@ export function TopBar({ activeModule, onModuleChange, feedOk }: TopBarProps) {
         <div className="bb-menubar__right">
           <span
             className={`bb-led${feedOk ? ' bb-led--on' : ''}`}
-            title={feedOk ? 'Market data refreshed (Stooq)' : 'Market data unavailable or loading'}
+            title={feedOk ? 'Market data refreshed (Tiingo)' : 'Market data unavailable or loading'}
           />
-          <span className="bb-menubar__meta">STOOQ</span>
+          <span className="bb-menubar__meta">Tiingo</span>
           <span className="bb-menubar__pipe" aria-hidden />
           <span className="bb-menubar__meta bb-menubar__meta--user" title="Not signed in">
             LOCAL

@@ -1,91 +1,54 @@
-import { useState } from 'react'
-import {
-  MOCK_EARNINGS_CALL,
-  MOCK_EARNINGS_DOCS,
-  MOCK_EARNINGS_HIGHLIGHTS,
-  MOCK_EARNINGS_QUARTERS,
-  MOCK_EARNINGS_TRANSCRIPT,
-} from '../../../data/equityTabMocks'
+import { useEffect, useState } from 'react'
+import { fetchEquityTiingoNews, type TiingoNewsItem } from '../../../services/market/equityTiingoApi'
 import { InlineBold } from './InlineBold'
 
 const CONTENT_TABS = ['Highlights', 'Transcript', 'Documents'] as const
 
-export function EquityEarningsTab() {
-  const [qid, setQid] = useState<string>(MOCK_EARNINGS_QUARTERS[1].id)
+export function EquityEarningsTab({ symbol }: { symbol: string }) {
   const [content, setContent] = useState<(typeof CONTENT_TABS)[number]>('Highlights')
+  const [news, setNews] = useState<TiingoNewsItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [txSearch, setTxSearch] = useState('')
 
-  const c = MOCK_EARNINGS_CALL
+  useEffect(() => {
+    let cancel = false
+    ;(async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const items = await fetchEquityTiingoNews(symbol, 60)
+        if (!cancel) setNews(items)
+      } catch (e) {
+        if (!cancel) setError(e instanceof Error ? e.message : String(e))
+      } finally {
+        if (!cancel) setLoading(false)
+      }
+    })()
+    return () => {
+      cancel = true
+    }
+  }, [symbol])
+
+  const highlights = news
+    .map((n) => n.title || n.description || '')
+    .filter(Boolean)
+    .slice(0, 12)
 
   return (
     <div className="bb-eq-sub">
-      <div className="bb-eq-earn__pills" role="tablist" aria-label="Quarters">
-        {MOCK_EARNINGS_QUARTERS.map((q) => (
-          <button
-            key={q.id}
-            type="button"
-            role="tab"
-            className={`bb-eq-earn__pill${qid === q.id ? ' bb-eq-earn__pill--on' : ''}${q.future ? ' bb-eq-earn__pill--fu' : ''}`}
-            onClick={() => setQid(q.id)}
-          >
-            <span>{q.label}</span>
-            {q.future ? (
-              <span className="bb-eq-earn__badge bb-eq-earn__badge--am">IN {q.days}D</span>
-            ) : q.pct != null ? (
-              <span className={`bb-eq-earn__badge${q.beat ? ' bb-eq-earn__badge--ok' : ' bb-eq-earn__badge--bad'}`}>
-                {q.beat ? '+' : ''}
-                {q.pct.toFixed(2)}%
-              </span>
-            ) : null}
-          </button>
-        ))}
-      </div>
+      <p className="muted bb-eq-sub__note">
+        <span className="mono">{symbol}</span> — Earnings call transcripts and detailed estimates are not exposed
+        through Tiingo&apos;s public news feed. Below: recent <strong>Tiingo news</strong> for highlights; SEC EDGAR
+        or a vendor feed would be needed for full calls.
+      </p>
 
-      <section className="bb-eq-earn__card">
-        <div className="bb-eq-earn__cardhd">
-          <div>
-            <h2 className="bb-eq-earn__title">{c.title}</h2>
-            <p className="bb-eq-earn__when muted mono">{c.datetime}</p>
-          </div>
-          <button type="button" className="bb-eq-earn__play">
-            ▶ LISTEN
-          </button>
-        </div>
-        <div className="bb-eq-earn__grid">
-          <div className="bb-eq-earn__stat">
-            <span className="muted">REV EST</span>
-            <span className="mono">{c.revenue.est}</span>
-          </div>
-          <div className="bb-eq-earn__stat">
-            <span className="muted">REV ACT</span>
-            <span className="mono">{c.revenue.actual}</span>
-          </div>
-          <div className="bb-eq-earn__stat">
-            <span className="muted">BEAT</span>
-            <span className="mono pos">{c.revenue.beat}</span>
-          </div>
-          <div className="bb-eq-earn__stat">
-            <span className="muted">1D MOVE</span>
-            <span className="mono pos">{c.revenue.move1d}</span>
-          </div>
-          <div className="bb-eq-earn__stat">
-            <span className="muted">EPS EST</span>
-            <span className="mono">{c.eps.est}</span>
-          </div>
-          <div className="bb-eq-earn__stat">
-            <span className="muted">EPS ACT</span>
-            <span className="mono">{c.eps.actual}</span>
-          </div>
-          <div className="bb-eq-earn__stat">
-            <span className="muted">BEAT</span>
-            <span className="mono pos">{c.eps.beat}</span>
-          </div>
-          <div className="bb-eq-earn__stat">
-            <span className="muted">PX</span>
-            <span className="mono">{c.eps.price}</span>
-          </div>
-        </div>
-      </section>
+      {loading ? <p className="mono muted">Loading news…</p> : null}
+      {error ? (
+        <p className="mono bb-eq-feedwarn" role="alert">
+          {error}
+        </p>
+      ) : null}
 
       <div className="bb-eq-earn__ctabs">
         {CONTENT_TABS.map((t) => (
@@ -101,42 +64,53 @@ export function EquityEarningsTab() {
       </div>
 
       {content === 'Highlights' ? (
-        <ul className="bb-eq-earn__hl">
-          {MOCK_EARNINGS_HIGHLIGHTS.map((h, i) => (
-            <li key={i} className="bb-eq-earn__hli">
-              <InlineBold text={h} />
-            </li>
-          ))}
-        </ul>
+        highlights.length ? (
+          <ul className="bb-eq-earn__hl">
+            {highlights.map((h, i) => (
+              <li key={i} className="bb-eq-earn__hli">
+                <InlineBold text={h} />
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mono muted">No news headlines returned for this symbol.</p>
+        )
       ) : content === 'Transcript' ? (
         <div className="bb-eq-earn__tx">
+          <p className="mono muted">
+            Transcript search is not available from the Tiingo integration. Use Highlights for headlines or wire a
+            dedicated transcript provider.
+          </p>
           <input
             className="bb-eq-earn__search"
-            placeholder="Search transcript..."
+            placeholder="Search (disabled)…"
             value={txSearch}
             onChange={(e) => setTxSearch(e.target.value)}
+            disabled
           />
-          {MOCK_EARNINGS_TRANSCRIPT.filter(
-            (b) =>
-              !txSearch ||
-              b.text.toLowerCase().includes(txSearch.toLowerCase()) ||
-              b.speaker.toLowerCase().includes(txSearch.toLowerCase()),
-          ).map((b, i) => (
-            <div key={i} className="bb-eq-earn__blk">
-              <div className="bb-eq-earn__sp mono">{b.speaker}</div>
-              <p className="bb-eq-earn__txp">{b.text}</p>
-            </div>
-          ))}
         </div>
       ) : (
         <ul className="bb-eq-earn__docs">
-          {MOCK_EARNINGS_DOCS.map((d) => (
-            <li key={d.label}>
-              <a href={d.href} className="bb-eq-earn__doc">
-                {d.label}
-              </a>
-            </li>
-          ))}
+          {news.length ? (
+            news.map((d, i) => (
+              <li key={`${d.url ?? d.title}-${i}`}>
+                <a
+                  href={d.url ?? '#'}
+                  className="bb-eq-earn__doc"
+                  target="_blank"
+                  rel="noreferrer"
+                  title={d.publishedDate}
+                >
+                  {d.title ?? d.description ?? d.url ?? 'Article'}
+                </a>
+                {d.source ? (
+                  <span className="muted mono"> · {d.source}</span>
+                ) : null}
+              </li>
+            ))
+          ) : (
+            <li className="mono muted">No document links from news feed.</li>
+          )}
         </ul>
       )}
     </div>

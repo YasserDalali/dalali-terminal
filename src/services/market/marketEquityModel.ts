@@ -1,7 +1,8 @@
 import type { EquityChartRange } from '../../data/equityChartRanges'
 import { MOCK_EQUITY, type EquityDetailModel } from '../../data/mockEquity'
+import { EQUITY_PREV_CLOSE_LABEL } from '../../data/equityStatLabels'
 import { EQUITY_LISTING } from './marketConfig'
-import type { StooqOhlcvBar } from './stooqDaily'
+import type { DailyOhlcvBar } from './dailyBarTypes'
 
 export type { EquityChartRange }
 
@@ -22,35 +23,15 @@ function ymdToLabel(ymd: string): string {
   return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-function buildStats(sym: string, bars: StooqOhlcvBar[]): EquityDetailModel['stats'] {
-  if (bars.length < 2) return MOCK_EQUITY.stats
+function buildStats(_sym: string, bars: DailyOhlcvBar[]): EquityDetailModel['stats'] {
   const last = bars[bars.length - 1]!
   const prev = bars[bars.length - 2]!
   const yearTail = bars.slice(-252)
   const hi52 = Math.max(...yearTail.map((b) => b.high), last.high)
   const lo52 = Math.min(...yearTail.map((b) => b.low), last.low)
 
-  const live = [
-    { label: 'PREV CLOSE' as const, value: prev.close.toFixed(2) },
-    { label: 'OPEN' as const, value: last.open.toFixed(2) },
-    { label: 'DAY RANGE' as const, value: `${last.low.toFixed(2)} – ${last.high.toFixed(2)}` },
-    { label: 'VOLUME' as const, value: formatVol(last.volume) },
-    { label: '52W RANGE' as const, value: `${lo52.toFixed(2)} – ${hi52.toFixed(2)}` },
-  ]
-
-  if (sym === 'MSFT') {
-    const mockByLabel = Object.fromEntries(MOCK_EQUITY.stats.map((s) => [s.label, s.value])) as Record<string, string>
-    const order = MOCK_EQUITY.stats.map((s) => s.label)
-    const merged = order.map((label) => {
-      const hit = live.find((x) => x.label === label)
-      if (hit) return { label, value: hit.value }
-      return { label, value: mockByLabel[label] ?? '—' }
-    })
-    return merged
-  }
-
   return [
-    { label: 'PREV CLOSE', value: prev.close.toFixed(2) },
+    { label: EQUITY_PREV_CLOSE_LABEL, value: prev.close.toFixed(2) },
     { label: 'MKT CAP', value: '—' },
     { label: 'OPEN', value: last.open.toFixed(2) },
     { label: 'P/E (TTM)', value: '—' },
@@ -62,18 +43,54 @@ function buildStats(sym: string, bars: StooqOhlcvBar[]): EquityDetailModel['stat
   ]
 }
 
-function buildMovement(bars: StooqOhlcvBar[]): EquityDetailModel['movement'] {
-  if (bars.length < 2) return MOCK_EQUITY.movement
+function buildMovement(bars: DailyOhlcvBar[]): EquityDetailModel['movement'] {
   const prev = bars[bars.length - 2]!
   const last = bars[bars.length - 1]!
   const pct = prev.close !== 0 ? ((last.close - prev.close) / prev.close) * 100 : 0
-  const t = `${ymdToLabel(last.dateYmd)}, 4:00 PM`
+  const t = `${ymdToLabel(last.dateYmd)}, EOD (adj.)`
   const line = `$${last.close.toFixed(2)} ${pct >= 0 ? '↗' : '↘'} ${Math.abs(pct).toFixed(2)}% vs prior close`
   return [{ t, line, kind: 'close' as const }]
 }
 
-/** Closes for the price chart for the selected range. */
-export function sliceClosesForRange(bars: StooqOhlcvBar[], range: EquityChartRange): number[] {
+function emptyLikeListing(sym: string, reason: string): EquityDetailModel {
+  const listing = EQUITY_LISTING[sym]
+  const dashStats: EquityDetailModel['stats'] = MOCK_EQUITY.stats.map((s) => ({ ...s, value: '—' }))
+  return {
+    ...MOCK_EQUITY,
+    symbol: sym,
+    name: listing?.name ?? sym,
+    exchange: listing?.exchange ?? '—',
+    country: listing?.country ?? 'US',
+    price: Number.NaN,
+    change: Number.NaN,
+    changePct: Number.NaN,
+    afterHours: { price: Number.NaN, change: Number.NaN, changePct: Number.NaN, time: '—' },
+    stats: dashStats,
+    company: {
+      ipo: '—',
+      ceo: '—',
+      employees: '—',
+      sector: '—',
+      industry: '—',
+      description: reason,
+    },
+    analyst: {
+      ...MOCK_EQUITY.analyst,
+      current: Number.NaN,
+      targetLow: Number.NaN,
+      targetAvg: Number.NaN,
+      targetHigh: Number.NaN,
+    },
+    movement: [],
+    narrative: reason,
+    news: [],
+    sourcesCount: 0,
+    peers: listing?.peers ?? [],
+  }
+}
+
+/** Closes for the price chart for the selected range (adj. close). */
+export function sliceClosesForRange(bars: DailyOhlcvBar[], range: EquityChartRange): number[] {
   if (bars.length === 0) return []
   const lastYmd = bars[bars.length - 1]!.dateYmd
   const year = lastYmd.slice(0, 4)
@@ -101,63 +118,94 @@ export function sliceClosesForRange(bars: StooqOhlcvBar[], range: EquityChartRan
   }
 }
 
-/** Merge Stooq daily series with static copy where the feed has no fundamentals. */
-export function buildEquityDetail(symbol: string, bars: StooqOhlcvBar[]): EquityDetailModel {
-  const sym = symbol.trim().toUpperCase()
-  const listing = EQUITY_LISTING[sym]
-
-  if (bars.length < 2) {
-    if (sym === 'MSFT') return { ...MOCK_EQUITY }
-    return {
-      ...MOCK_EQUITY,
-      symbol: sym,
-      name: listing?.name ?? sym,
-      exchange: listing?.exchange ?? '—',
-      country: listing?.country ?? 'US',
-      peers: listing?.peers ?? MOCK_EQUITY.peers,
-      company: {
-        ...MOCK_EQUITY.company,
-        description: `${listing?.name ?? sym} — insufficient price history from data source.`,
-      },
+/** Full OHLCV rows for the selected range (for historical price table). */
+export function sliceOhlcvForRange(bars: DailyOhlcvBar[], range: EquityChartRange): DailyOhlcvBar[] {
+  if (bars.length === 0) return []
+  const lastYmd = bars[bars.length - 1]!.dateYmd
+  const year = lastYmd.slice(0, 4)
+  switch (range) {
+    case '1D':
+      return bars.slice(-2)
+    case '5D':
+      return bars.slice(-5)
+    case '1M':
+      return bars.slice(-22)
+    case '6M':
+      return bars.slice(-126)
+    case '1Y':
+      return bars.slice(-252)
+    case '5Y':
+      return bars.slice(-252 * 5)
+    case 'YTD': {
+      const ytd = bars.filter((b) => b.dateYmd.startsWith(year))
+      return ytd.length >= 2 ? ytd : bars.slice(-22)
     }
+    case 'MAX':
+    default:
+      return bars
+  }
+}
+
+type EquityDetailOpts = {
+  loading: boolean
+  /** Set when `loading` is false and the feed failed or history is too short. */
+  reasonUnavailable: string | null
+}
+
+/** Live Tiingo EOD (adj.) + static listing; no mock prices. */
+export function buildEquityDetail(
+  symbol: string,
+  bars: DailyOhlcvBar[],
+  opts: EquityDetailOpts,
+): EquityDetailModel {
+  const sym = symbol.trim().toUpperCase()
+
+  if (opts.loading && bars.length < 2) {
+    return emptyLikeListing(sym, 'Loading Tiingo prices (via portfolio API)…')
   }
 
+  if (opts.reasonUnavailable || bars.length < 2) {
+    return emptyLikeListing(
+      sym,
+      opts.reasonUnavailable ??
+        'Not enough price history from Tiingo. Check portfolio API, TIINGO_API_TOKEN, and symbol.',
+    )
+  }
+
+  const listing = EQUITY_LISTING[sym]
   const prev = bars[bars.length - 2]!
   const last = bars[bars.length - 1]!
   const change = last.close - prev.close
   const changePct = prev.close !== 0 ? (change / prev.close) * 100 : 0
 
-  const base =
-    sym === 'MSFT'
-      ? MOCK_EQUITY
-      : {
-          ...MOCK_EQUITY,
-          company: {
-            ipo: '—',
-            ceo: '—',
-            employees: '—',
-            sector: '—',
-            industry: '—',
-            description: `${listing?.name ?? sym} — profile data not wired for this symbol.`,
-          },
-          analyst: {
-            ...MOCK_EQUITY.analyst,
-            consensus: 'Hold',
-            strongBuy: 2,
-            buy: 8,
-            hold: 12,
-            sell: 3,
-            bullishPct: 40,
-            neutralPct: 45,
-            bearishPct: 15,
-            targetLow: last.close * 0.85,
-            targetAvg: last.close * 1.05,
-            targetHigh: last.close * 1.2,
-          },
-          narrative: `**${listing?.name ?? sym}** — Daily prices from Stooq; narrative and some fundamentals are placeholders until a fundamentals API is connected.`,
-          news: MOCK_EQUITY.news.map((n, i) => ({ ...n, id: `${sym}-${i}` })),
-          sourcesCount: 0,
-        }
+  const base = {
+    ...MOCK_EQUITY,
+    company: {
+      ipo: '—',
+      ceo: '—',
+      employees: '—',
+      sector: '—',
+      industry: '—',
+      description: `${listing?.name ?? sym} — company profile not wired; prices are adj. EOD from Tiingo (via API).`,
+    },
+    analyst: {
+      ...MOCK_EQUITY.analyst,
+      consensus: 'Hold',
+      strongBuy: 0,
+      buy: 0,
+      hold: 0,
+      sell: 0,
+      bullishPct: 0,
+      neutralPct: 0,
+      bearishPct: 0,
+      targetLow: last.close * 0.9,
+      targetAvg: last.close,
+      targetHigh: last.close * 1.1,
+    },
+    narrative: `**${listing?.name ?? sym}** — Adj. daily prices from Tiingo. Fundamentals and analyst blocks are placeholders until wired to a fundamentals provider.`,
+    news: [],
+    sourcesCount: 0,
+  }
 
   return {
     ...base,
@@ -173,7 +221,7 @@ export function buildEquityDetail(symbol: string, bars: StooqOhlcvBar[]): Equity
       price: last.close,
       change: 0,
       changePct: 0,
-      time: 'Daily EOD',
+      time: 'Daily EOD (adj.)',
     },
     stats: buildStats(sym, bars),
     analyst: { ...base.analyst, current: last.close },

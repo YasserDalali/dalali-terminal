@@ -7,7 +7,7 @@ interface StatusBarProps {
   clockTime: string
   /** When market data was last successfully refreshed; shown as DATA time. */
   lastDataRefresh: string
-  /** True when the Stooq-backed feed has data and no hard error. */
+  /** True when Tiingo (via portfolio API) returned data and no hard error. */
   feedOk: boolean
 }
 
@@ -21,8 +21,8 @@ export function StatusBar({
 }: StatusBarProps) {
   return (
     <footer className="bb-status" role="contentinfo">
-      <span className="bb-status__cell muted" title="End-of-day quotes via Stooq (not live DMA)">
-        DATA <span className="bb-status__hl">STOOQ</span>
+      <span className="bb-status__cell muted" title="Adj. end-of-day from Tiingo (portfolio API), not live DMA">
+        DATA <span className="bb-status__hl">Tiingo</span>
       </span>
       <span className="bb-status__sep" aria-hidden>
         |

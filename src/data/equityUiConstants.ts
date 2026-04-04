@@ -8,4 +8,4 @@ export const EQUITY_TABWRAP_NOTE_STYLE = {
 } as const
 
 export const EQUITY_NON_OVERVIEW_TAB_NOTICE =
-  'Demo / mock data for this tab — not tied to the selected ticker or a live API.'
+  'Financials, earnings (news), historical prices, analysis, and relations load from Tiingo via the portfolio API. Holders/13F are not wired.'

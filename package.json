@@ -11,6 +11,7 @@
     "server": "npm run start --prefix api",
     "server:dev": "npm run dev --prefix api",
     "redis:ping": "npm run redis:ping --prefix api",
+    "test:api": "npm test --prefix api",
     "dev:stack": "concurrently -n web,api -c blue,magenta \"vite\" \"npm run dev --prefix api\""
   },
   "dependencies": {

@@ -1,13 +1,13 @@
 import { EQUITY_CHART_RANGES, type EquityChartRange } from './equityChartRanges'
 
-/** Primary listing region shown in markets UI (Stooq watchlist is US-listed). */
+/** Primary listing region shown in markets UI (Tiingo US-listed). */
 export const MARKETS_PRIMARY_REGION = { code: 'US' as const, label: 'US' as const }
 
 /** Appended after the ticker in the watchlist name column (e.g. "AAPL US"). */
 export const MARKETS_WATCHLIST_LISTING_SUFFIX = ' US'
 
 export const MARKETS_REGION_SELECT_TITLE =
-  'Watchlist and indices use US-listed Stooq symbols only'
+  'Watchlist and indices use US tickers (Tiingo via portfolio API)'
 
 export const MARKETS_CLOCK_TICK_MS = 1000
 

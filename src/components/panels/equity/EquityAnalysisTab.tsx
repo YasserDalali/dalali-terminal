@@ -1,123 +1,202 @@
-import { useMemo, useState } from 'react'
-import { MOCK_EQUITY } from '../../../data/mockEquity'
+import { useEffect, useMemo, useState } from 'react'
 import {
-  MOCK_ANALYSIS_SYNTHESIS,
-  MOCK_ANALYST_RATINGS,
-  MOCK_RESEARCH_REPORTS,
-} from '../../../data/equityTabMocks'
-import { formatUsd } from '../../../utils/formatMoney'
+  fetchEquityFundamentalsDaily,
+  fetchEquityFundamentalsDefinitions,
+  fetchEquityTiingoNews,
+  type TiingoNewsItem,
+} from '../../../services/market/equityTiingoApi'
+import { unwrapTiingoRecordArray } from '../../../utils/tiingoGrid'
 import { InlineBold } from './InlineBold'
 
-export function EquityAnalysisTab() {
-  const q = MOCK_EQUITY
-  const [expanded, setExpanded] = useState(false)
-  const rows = expanded ? MOCK_ANALYST_RATINGS : MOCK_ANALYST_RATINGS.slice(0, 3)
+const SKIP_KEYS = new Set([
+  'date',
+  'reportDate',
+  'filingDate',
+  'periodEndDate',
+  'endDate',
+  'symbol',
+  'ticker',
+  'overview',
+])
 
-  const track = useMemo(() => {
-    const { targetLow, targetHigh, current } = q.analyst
-    const span = targetHigh - targetLow
-    const p = span > 0 ? ((current - targetLow) / span) * 100 : 50
-    return { pct: Math.min(100, Math.max(0, p)), ...q.analyst }
-  }, [q.analyst])
+function buildDefinitionMap(raw: unknown): Record<string, string> {
+  const rows = unwrapTiingoRecordArray(raw)
+  const m: Record<string, string> = {}
+  for (const r of rows) {
+    const code = r.fieldName ?? r.code ?? r.metric ?? r.name ?? r.id
+    const desc = r.description ?? r.label ?? r.title ?? r.longDescription
+    if (code != null && desc != null) m[String(code)] = String(desc)
+  }
+  return m
+}
+
+function fmtCell(v: unknown): string {
+  if (v == null) return '—'
+  if (typeof v === 'number' && Number.isFinite(v)) {
+    if (Math.abs(v) >= 1e12) return `${(v / 1e12).toFixed(2)}T`
+    if (Math.abs(v) >= 1e9) return `${(v / 1e9).toFixed(2)}B`
+    if (Math.abs(v) >= 1e6) return `${(v / 1e6).toFixed(2)}M`
+    if (Math.abs(v) >= 1e3) return `${(v / 1e3).toFixed(2)}K`
+    return v.toLocaleString('en-US', { maximumFractionDigits: 6 })
+  }
+  if (typeof v === 'boolean') return v ? 'Yes' : 'No'
+  const s = String(v)
+  return s.length > 56 ? `${s.slice(0, 53)}…` : s
+}
+
+export function EquityAnalysisTab({ symbol }: { symbol: string }) {
+  const [dailyRaw, setDailyRaw] = useState<unknown>(null)
+  const [defsRaw, setDefsRaw] = useState<unknown>(null)
+  const [news, setNews] = useState<TiingoNewsItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [expanded, setExpanded] = useState(false)
+
+  useEffect(() => {
+    let cancel = false
+    ;(async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const end = new Date().toISOString().slice(0, 10)
+        const [dy, df, nw] = await Promise.all([
+          fetchEquityFundamentalsDaily(symbol, { startDate: '2020-01-01', endDate: end }),
+          fetchEquityFundamentalsDefinitions(symbol),
+          fetchEquityTiingoNews(symbol, 20),
+        ])
+        if (!cancel) {
+          setDailyRaw(dy)
+          setDefsRaw(df)
+          setNews(nw)
+        }
+      } catch (e) {
+        if (!cancel) setError(e instanceof Error ? e.message : String(e))
+      } finally {
+        if (!cancel) setLoading(false)
+      }
+    })()
+    return () => {
+      cancel = true
+    }
+  }, [symbol])
+
+  const defMap = useMemo(() => buildDefinitionMap(defsRaw), [defsRaw])
+
+  const { asOf, metricEntries } = useMemo(() => {
+    const rows = unwrapTiingoRecordArray(dailyRaw)
+    if (!rows.length) return { asOf: null as string | null, metricEntries: [] as [string, unknown][] }
+    const latest = rows[rows.length - 1]!
+    let asOf: string | null = null
+    for (const k of ['date', 'reportDate', 'endDate', 'periodEndDate']) {
+      const v = latest[k]
+      if (v != null) {
+        asOf = String(v).slice(0, 10)
+        break
+      }
+    }
+    const metricEntries = Object.entries(latest)
+      .filter(([k, v]) => !SKIP_KEYS.has(k) && v !== null && typeof v !== 'object')
+      .sort(([a], [b]) => a.localeCompare(b))
+    return { asOf, metricEntries }
+  }, [dailyRaw])
+
+  const shown = expanded ? metricEntries : metricEntries.slice(0, 28)
+  const synthesis =
+    news[0]?.title && news[0]?.description
+      ? `${news[0].title}. ${news[0].description}`
+      : news[0]?.title ?? news[0]?.description ?? ''
 
   return (
     <div className="bb-eq-sub bb-eq-an">
-      <div className="bb-eq-an__strip">
-        <span className="bb-eq-an__cons">CONSENSUS {q.analyst.consensus.toUpperCase()}</span>
-        <span className="mono muted">
-          BULL {q.analyst.bullishPct}% · NEU {q.analyst.neutralPct}% · BEAR {q.analyst.bearishPct}%
-        </span>
-        <span className="bb-eq-an__sb mono">STRONG BUY {q.analyst.strongBuy}</span>
-        <span className="mono">BUY {q.analyst.buy}</span>
-        <span className="mono">HOLD {q.analyst.hold}</span>
-        <span className="mono">SELL {q.analyst.sell}</span>
-      </div>
+      <p className="muted bb-eq-sub__note">
+        <span className="mono">{symbol}</span> — Street estimates and analyst grids are not available from Tiingo.
+        This tab shows the latest <strong>fundamentals daily</strong> snapshot (Tiingo), metric definitions when the
+        API returns them, and recent <strong>news</strong>.
+      </p>
+
+      {loading ? <p className="mono muted">Loading analysis data…</p> : null}
+      {error ? (
+        <p className="mono bb-eq-feedwarn" role="alert">
+          {error}
+        </p>
+      ) : null}
 
       <div className="bb-eq-an__layout">
         <div className="bb-eq-an__main">
-          <h2 className="bb-eq-sec__ttl">ANALYST RATINGS</h2>
-          <div className="bb-scroll">
-            <table className="bb-eq-grid">
-              <thead>
-                <tr>
-                  <th>FIRM</th>
-                  <th>ANALYST</th>
-                  <th>RATING</th>
-                  <th className="bb-grid__r">52W TGT</th>
-                  <th className="bb-grid__r">UPSIDE</th>
-                  <th>DATE</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={`${r.firm}-${r.date}`}>
-                    <td>{r.firm}</td>
-                    <td className="muted">{r.analyst}</td>
-                    <td>
-                      <span
-                        className={`bb-eq-rat${r.rating === 'Hold' ? ' bb-eq-rat--hold' : r.rating === 'Buy' ? ' bb-eq-rat--buy' : ' bb-eq-rat--op'}`}
-                      >
-                        {r.rating.toUpperCase()}
-                      </span>
-                    </td>
-                    <td className="bb-grid__r mono">
-                      <strong>{r.target}</strong>{' '}
-                      <span className="muted">from {r.targetPrev}</span>
-                    </td>
-                    <td className={`bb-grid__r mono${r.upside.startsWith('+') ? ' pos' : ' neg'}`}>
-                      {r.upside}
-                    </td>
-                    <td className="mono muted">{r.date}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {MOCK_ANALYST_RATINGS.length > 3 ? (
-            <button type="button" className="bb-eq-more bb-eq-an__more" onClick={() => setExpanded((e) => !e)}>
-              {expanded ? 'SHOW LESS ▴' : `SEE ${MOCK_ANALYST_RATINGS.length - 3} MORE ▾`}
-            </button>
+          <h2 className="bb-eq-sec__ttl">FUNDAMENTALS DAILY (LATEST)</h2>
+          {asOf ? (
+            <p className="mono muted" style={{ margin: '0 0 0.5rem' }}>
+              As of {asOf} · {metricEntries.length} fields
+            </p>
           ) : null}
-
-          <h2 className="bb-eq-sec__ttl">52W PRICE TARGET</h2>
-          <div className="bb-eq-pt bb-eq-an__pt">
-            <div className="bb-eq-pt__track">
-              <span className="bb-eq-pt__lab bb-eq-pt__lab--l mono">${track.targetLow}</span>
-              <span className="bb-eq-pt__lab bb-eq-pt__lab--m mono">${track.targetAvg}</span>
-              <span className="bb-eq-pt__lab bb-eq-pt__lab--h mono">${track.targetHigh}</span>
-              <div className="bb-eq-pt__rail">
-                <div className="bb-eq-pt__fill" style={{ width: `${track.pct}%` }} />
-                <span className="bb-eq-pt__cur" style={{ left: `${track.pct}%` }} title="Last" />
+          {!metricEntries.length && !loading ? (
+            <p className="mono muted">No fundamentals daily rows for this symbol.</p>
+          ) : (
+            <>
+              <div className="bb-scroll">
+                <table className="bb-eq-grid">
+                  <thead>
+                    <tr>
+                      <th>METRIC</th>
+                      <th className="bb-grid__r">VALUE</th>
+                      <th>DESCRIPTION</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {shown.map(([k, v]) => (
+                      <tr key={k}>
+                        <td className="mono">{k}</td>
+                        <td className="bb-grid__r mono">{fmtCell(v)}</td>
+                        <td className="muted">{defMap[k] ?? '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            </div>
-            <div className="bb-eq-pt__now mono">LAST {formatUsd(q.price)}</div>
-          </div>
+              {metricEntries.length > 28 ? (
+                <button type="button" className="bb-eq-more bb-eq-an__more" onClick={() => setExpanded((e) => !e)}>
+                  {expanded ? 'SHOW LESS ▴' : `SEE ${metricEntries.length - 28} MORE ▾`}
+                </button>
+              ) : null}
+            </>
+          )}
         </div>
 
         <aside className="bb-eq-an__side">
           <section className="bb-eq-side__blk">
-            <h2 className="bb-eq-side__ttl">AI SYNTHESIS</h2>
+            <h2 className="bb-eq-side__ttl">HEADLINE CONTEXT</h2>
             <div className="bb-eq-an__syn">
-              <InlineBold text={MOCK_ANALYSIS_SYNTHESIS} as="p" />
+              {synthesis ? (
+                <InlineBold text={synthesis} as="p" />
+              ) : (
+                <p className="mono muted">No recent headline text from Tiingo news.</p>
+              )}
             </div>
           </section>
           <section className="bb-eq-side__blk">
-            <h2 className="bb-eq-side__ttl">RESEARCH</h2>
+            <h2 className="bb-eq-side__ttl">NEWS</h2>
             <ul className="bb-eq-an__rep">
-              {MOCK_RESEARCH_REPORTS.map((r) => (
-                <li key={r.title} className="bb-eq-an__repi">
-                  <span className="bb-eq-an__fav" aria-hidden />
-                  <div>
-                    <div className="bb-eq-an__rept">{r.title}</div>
-                    <div className="muted mono">
-                      {r.author} · {r.date}
+              {news.length ? (
+                news.map((r, i) => (
+                  <li key={`${r.url ?? r.title}-${i}`} className="bb-eq-an__repi">
+                    <div>
+                      <a
+                        href={r.url ?? '#'}
+                        className="bb-eq-an__rept"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {r.title ?? r.description ?? 'Article'}
+                      </a>
+                      <div className="muted mono">
+                        {r.source ?? '—'} · {r.publishedDate?.slice(0, 10) ?? '—'}
+                      </div>
                     </div>
-                  </div>
-                  <button type="button" className="bb-eq-btn">
-                    VIEW
-                  </button>
-                </li>
-              ))}
+                  </li>
+                ))
+              ) : (
+                <li className="mono muted">No news items.</li>
+              )}
             </ul>
           </section>
         </aside>

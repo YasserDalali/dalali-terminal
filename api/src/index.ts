@@ -26,6 +26,7 @@ import {
   readBudgetPayload,
   writeBudgetPayload,
 } from './budgetPg.js'
+import { registerExternalMarketRoutes } from './externalMarketRoutes.js'
 
 const REDIS_KEY = process.env.PORTFOLIO_REDIS_KEY ?? 'dalali:portfolio:payload'
 const PORT = Number(process.env.PORT ?? process.env.PORTFOLIO_API_PORT ?? 8787)
@@ -166,6 +167,8 @@ const app = express()
 app.use(cors({ origin: true }))
 app.use(express.json())
 
+registerExternalMarketRoutes(app, getRedis)
+
 app.get('/health', async (_req, res) => {
   try {
     const r = await getRedis()
@@ -179,7 +182,19 @@ app.get('/health', async (_req, res) => {
         budgetDb = 'error'
       }
     }
-    res.json({ ok: true, redis: pong, budgetDb })
+    res.json({
+      ok: true,
+      redis: pong,
+      budgetDb,
+      providers: {
+        tiingo: Boolean(process.env.TIINGO_API_TOKEN?.trim()),
+        fred: Boolean(process.env.FRED_API_KEY?.trim()),
+        alpaca: Boolean(
+          process.env.ALPACA_API_KEY_ID?.trim() && process.env.ALPACA_API_SECRET_KEY?.trim(),
+        ),
+        ibkrFlex: Boolean(process.env.IBKR_FLEX_TOKEN?.trim() && process.env.IBKR_FLEX_QUERY_ID?.trim()),
+      },
+    })
   } catch (e) {
     res.status(503).json({ ok: false, error: e instanceof Error ? e.message : String(e) })
   }

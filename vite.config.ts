@@ -36,12 +36,6 @@ export default defineConfig(({ mode }) => {
           secure: true,
           rewrite: (path) => path.replace(/^\/ibkr-flex/, '/AccountManagement/FlexWebService'),
         },
-        '/stooq-proxy': {
-          target: 'https://stooq.com',
-          changeOrigin: true,
-          secure: true,
-          rewrite: (path) => path.replace(/^\/stooq-proxy/, ''),
-        },
       },
     },
   }

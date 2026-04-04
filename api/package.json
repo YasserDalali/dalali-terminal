@@ -10,7 +10,8 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
-    "redis:ping": "tsx scripts/redis-ping.mts"
+    "redis:ping": "tsx scripts/redis-ping.mts",
+    "test": "tsx --test src/lib/fredClient.test.ts src/lib/tiingoClient.test.ts src/lib/alpacaClient.test.ts src/lib/macroPresets.test.ts"
   },
   "dependencies": {
     "cors": "^2.8.5",

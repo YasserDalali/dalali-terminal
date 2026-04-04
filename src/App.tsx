@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useLocation, useMatch, useNavigate } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation, useMatch, useNavigate } from 'react-router-dom'
 import './App.css'
 import { AdvisorDrawer } from './components/AdvisorDrawer'
 import { SplashScreen } from './components/SplashScreen'
@@ -7,7 +7,6 @@ import { CommandLine } from './components/CommandLine'
 import { EquityPage } from './components/panels/EquityPage'
 import { MarketsOverview } from './components/panels/MarketsOverview'
 import { ModulePlaceholder } from './components/panels/ModulePlaceholder'
-import { Sidebar } from './components/Sidebar'
 import { StatusBar } from './components/StatusBar'
 import { TopBar } from './components/TopBar'
 import { AdvisorPage } from './components/panels/advisor/AdvisorPage'
@@ -15,8 +14,8 @@ import { BudgetPage } from './components/panels/budget/BudgetPage'
 import { FinancePage } from './components/panels/finance/FinancePage'
 import { PortfolioPage } from './components/panels/portfolio/PortfolioPage'
 import { NAV_MODULES, type ModuleId } from './data/modules'
-import { normalizeEquitySymbol } from './data/equitySymbol'
-import { equityHref } from './navigation/equityRoutes'
+import { modulePath } from './routes/modulePaths'
+import { moduleIdFromPathname } from './routes/resolveModule'
 import { DEFAULT_EQUITY_SYMBOL } from './services/market/marketConfig'
 import { MARKET_DATA_REFRESH_INTERVAL_MS, useMarketData } from './services/market/marketDataStore'
 
@@ -32,9 +31,8 @@ export default function App() {
     ? decodeURIComponent(equityMatch.params.symbol)
     : undefined
 
-  const { setEquitySymbol, equitySymbol, lastUpdated, error, loading } = useMarketData()
+  const { equitySymbol, lastUpdated, error, loading } = useMarketData()
   const [splash, setSplash] = useState(true)
-  const [activeModule, setActiveModule] = useState<ModuleId>('markets')
   const [advisorOpen, setAdvisorOpen] = useState(false)
   const [clockTime, setClockTime] = useState(() => formatTime(new Date()))
   const [secondsToRefresh, setSecondsToRefresh] = useState(0)
@@ -67,24 +65,18 @@ export default function App() {
   const closeAdvisor = useCallback(() => setAdvisorOpen(false), [])
   const endSplash = useCallback(() => setSplash(false), [])
 
-  useEffect(() => {
-    if (!equityRouteSymbol) return
-    setEquitySymbol(normalizeEquitySymbol(equityRouteSymbol))
-  }, [equityRouteSymbol, setEquitySymbol])
-
-  const resolvedModule: ModuleId = equityRouteSymbol ? 'equity' : activeModule
+  const resolvedModule: ModuleId = moduleIdFromPathname(location.pathname)
 
   const handleModuleChange = useCallback(
     (id: ModuleId) => {
-      setActiveModule(id)
       if (id === 'equity') {
         const sym = equityRouteSymbol ?? equitySymbol ?? DEFAULT_EQUITY_SYMBOL
-        navigate(equityHref(sym))
-      } else if (location.pathname.startsWith('/equity/')) {
-        navigate('/', { replace: true })
+        navigate(modulePath('equity', { equitySymbol: sym }))
+      } else {
+        navigate(modulePath(id))
       }
     },
-    [navigate, location.pathname, equityRouteSymbol, equitySymbol],
+    [navigate, equityRouteSymbol, equitySymbol],
   )
 
   const activeLabel = NAV_MODULES.find((m) => m.id === resolvedModule)?.label ?? ''
@@ -96,24 +88,17 @@ export default function App() {
       <TopBar activeModule={resolvedModule} onModuleChange={handleModuleChange} feedOk={feedOk && !loading} />
 
       <div className="bb-body">
-        <Sidebar activeModule={resolvedModule} onModuleChange={handleModuleChange} />
-
         <main className="bb-main">
-          {resolvedModule === 'markets' ? (
-            <MarketsOverview />
-          ) : resolvedModule === 'equity' ? (
-            <EquityPage />
-          ) : resolvedModule === 'advisor' ? (
-            <AdvisorPage />
-          ) : resolvedModule === 'budget' ? (
-            <BudgetPage />
-          ) : resolvedModule === 'finance' ? (
-            <FinancePage />
-          ) : resolvedModule === 'portfolio' ? (
-            <PortfolioPage />
-          ) : (
-            <ModulePlaceholder moduleId={resolvedModule} />
-          )}
+          <Routes>
+            <Route index element={<MarketsOverview />} />
+            <Route path="equity/:symbol" element={<EquityPage />} />
+            <Route path="portfolio" element={<PortfolioPage />} />
+            <Route path="risk" element={<ModulePlaceholder moduleId="risk" />} />
+            <Route path="budget" element={<BudgetPage />} />
+            <Route path="finance" element={<FinancePage />} />
+            <Route path="advisor" element={<AdvisorPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
         </main>
       </div>
 

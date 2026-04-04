@@ -17,8 +17,8 @@ import {
   SECTOR_ETFS,
 } from './marketConfig'
 import { buildEquityDetail, sliceClosesForRange, type EquityChartRange } from './marketEquityModel'
-import { fetchStooqOhlcv, type StooqOhlcvBar } from './stooqDaily'
-import { tickerToStooq } from './stooqDaily'
+import type { DailyOhlcvBar } from './dailyBarTypes'
+import { fetchTiingoDailyOhlcvFromApi } from './tiingoBffClient'
 import { formatUsd } from '../../utils/formatMoney'
 
 /** Auto-refresh interval for market series (must match countdown in status bar). */
@@ -37,7 +37,7 @@ function addCalendarDays(d: Date, days: number): Date {
   return x
 }
 
-function lastTwoCloses(bars: StooqOhlcvBar[]): { prev: number; last: number } | null {
+function lastTwoCloses(bars: DailyOhlcvBar[]): { prev: number; last: number } | null {
   if (bars.length < 2) return null
   return {
     prev: bars[bars.length - 2]!.close,
@@ -67,9 +67,10 @@ export type WatchlistRow = {
 
 export type HeatTile = {
   sym: string
-  changePct: number
+  changePct: number | null
   up: boolean
   intensity: number
+  unavailable?: boolean
 }
 
 type MarketDataContextValue = {
@@ -79,19 +80,21 @@ type MarketDataContextValue = {
   equitySymbol: string
   setEquitySymbol: (sym: string) => void
   equityDetail: EquityDetailModel
-  equityBars: StooqOhlcvBar[]
+  equityBars: DailyOhlcvBar[]
   equityChartCloses: (range: EquityChartRange) => number[]
   loading: boolean
   error: string | null
+  /** Shown when some symbols failed but others succeeded */
+  partialWarning: string | null
   lastUpdated: Date | null
   refresh: () => void
 }
 
 const MarketDataContext = createContext<MarketDataContextValue | null>(null)
 
-function buildIndices(series: Record<string, StooqOhlcvBar[]>): IndexStripRow[] {
+function buildIndices(series: Record<string, DailyOhlcvBar[]>): IndexStripRow[] {
   return INDEX_STRIP.map((cfg) => {
-    const bars = series[cfg.stooq] ?? []
+    const bars = series[cfg.symbol] ?? []
     const t = lastTwoCloses(bars)
     if (!t) {
       return {
@@ -120,9 +123,9 @@ function buildIndices(series: Record<string, StooqOhlcvBar[]>): IndexStripRow[] 
   })
 }
 
-function buildWatchlist(series: Record<string, StooqOhlcvBar[]>): WatchlistRow[] {
+function buildWatchlist(series: Record<string, DailyOhlcvBar[]>): WatchlistRow[] {
   return DEFAULT_WATCHLIST.map((cfg) => {
-    const bars = series[cfg.stooq] ?? []
+    const bars = series[cfg.sym] ?? []
     const t = lastTwoCloses(bars)
     if (!t) {
       return {
@@ -149,34 +152,40 @@ function buildWatchlist(series: Record<string, StooqOhlcvBar[]>): WatchlistRow[]
   })
 }
 
-function buildHeatmap(series: Record<string, StooqOhlcvBar[]>): HeatTile[] {
-  return SECTOR_ETFS.map(({ sym, stooq }) => {
-    const bars = series[stooq] ?? []
+function buildHeatmap(series: Record<string, DailyOhlcvBar[]>): HeatTile[] {
+  return SECTOR_ETFS.map(({ sym }) => {
+    const bars = series[sym] ?? []
     const t = lastTwoCloses(bars)
-    const pct = t && t.prev !== 0 ? ((t.last - t.prev) / t.prev) * 100 : 0
+    if (!t) {
+      return { sym, changePct: null, up: true, intensity: 0, unavailable: true }
+    }
+    const pct = t.prev !== 0 ? ((t.last - t.prev) / t.prev) * 100 : 0
     const up = pct >= 0
     const intensity = Math.min(1, Math.abs(pct) / HEATMAP_ABS_PCT_FULL_INTENSITY)
-    return { sym, changePct: pct, up, intensity }
+    return { sym, changePct: pct, up, intensity, unavailable: false }
   })
 }
 
 export function MarketDataProvider({ children }: { children: ReactNode }) {
   const [equitySymbol, setEquitySymbolState] = useState(DEFAULT_EQUITY_SYMBOL)
-  const [seriesByStooq, setSeriesByStooq] = useState<Record<string, StooqOhlcvBar[]>>({})
+  const [seriesBySymbol, setSeriesBySymbol] = useState<Record<string, DailyOhlcvBar[]>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [partialWarning, setPartialWarning] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
-  const equityStooq = useMemo(() => tickerToStooq(equitySymbol), [equitySymbol])
+  const equityKey = useMemo(() => normalizeEquitySymbol(equitySymbol).toUpperCase(), [equitySymbol])
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
+    setPartialWarning(null)
+
     const symbols = new Set<string>([
-      ...INDEX_STRIP.map((i) => i.stooq),
-      ...DEFAULT_WATCHLIST.map((w) => w.stooq),
-      ...SECTOR_ETFS.map((s) => s.stooq),
-      equityStooq,
+      ...INDEX_STRIP.map((i) => i.symbol),
+      ...DEFAULT_WATCHLIST.map((w) => w.sym),
+      ...SECTOR_ETFS.map((s) => s.sym),
+      equityKey,
     ])
 
     const today = new Date()
@@ -185,27 +194,41 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
     const deepD1 = formatYmd(addCalendarDays(today, -365 * 8))
 
     const settled = await Promise.allSettled(
-      [...symbols].map(async (sq) => {
-        const d1 = sq === equityStooq ? deepD1 : shallowD1
-        const rows = await fetchStooqOhlcv(sq, d1, d2)
-        return [sq, rows] as const
+      [...symbols].map(async (sym) => {
+        const d1 = sym === equityKey ? deepD1 : shallowD1
+        const rows = await fetchTiingoDailyOhlcvFromApi(sym, d1, d2)
+        return [sym, rows] as const
       }),
     )
 
-    const next: Record<string, StooqOhlcvBar[]> = {}
+    const next: Record<string, DailyOhlcvBar[]> = {}
     let ok = 0
+    let failed = 0
+    let firstErr: string | null = null
     for (const r of settled) {
       if (r.status === 'fulfilled') {
-        const [sq, rows] = r.value
-        next[sq] = rows
+        const [sym, rows] = r.value
+        next[sym] = rows
         if (rows.length >= 2) ok += 1
+        else failed += 1
+      } else {
+        failed += 1
+        if (!firstErr) firstErr = r.reason instanceof Error ? r.reason.message : String(r.reason)
       }
     }
-    setSeriesByStooq(next)
+    setSeriesBySymbol(next)
     setLastUpdated(new Date())
-    if (ok === 0) setError('Could not load market data (check network or Stooq).')
+
+    if (ok === 0) {
+      setError(
+        firstErr ??
+          'Market data unavailable. Run the portfolio API with TIINGO_API_TOKEN, or check /api/market/tiingo.',
+      )
+    } else if (failed > 0) {
+      setPartialWarning('Some symbols failed to load from Tiingo; rows show — where data is missing.')
+    }
     setLoading(false)
-  }, [equityStooq])
+  }, [equityKey])
 
   useEffect(() => {
     void load()
@@ -220,14 +243,24 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
     setEquitySymbolState(normalizeEquitySymbol(sym))
   }, [])
 
-  const equityBars = seriesByStooq[equityStooq] ?? []
+  const equityBars = seriesBySymbol[equityKey] ?? []
+
+  const equityUnavailableReason = useMemo(() => {
+    if (loading) return null
+    if (equityBars.length >= 2) return null
+    if (error) return error
+    return 'Insufficient Tiingo history for this symbol (or symbol failed to load).'
+  }, [loading, error, equityBars.length])
 
   const value = useMemo((): MarketDataContextValue => {
-    const equityDetail = buildEquityDetail(equitySymbol, equityBars)
+    const equityDetail = buildEquityDetail(equitySymbol, equityBars, {
+      loading,
+      reasonUnavailable: equityUnavailableReason,
+    })
     return {
-      indices: buildIndices(seriesByStooq),
-      watchlist: buildWatchlist(seriesByStooq),
-      heatmap: buildHeatmap(seriesByStooq),
+      indices: buildIndices(seriesBySymbol),
+      watchlist: buildWatchlist(seriesBySymbol),
+      heatmap: buildHeatmap(seriesBySymbol),
       equitySymbol,
       setEquitySymbol,
       equityDetail,
@@ -235,19 +268,22 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
       equityChartCloses: (range: EquityChartRange) => sliceClosesForRange(equityBars, range),
       loading,
       error,
+      partialWarning,
       lastUpdated,
       refresh: load,
     }
   }, [
-    seriesByStooq,
+    seriesBySymbol,
     equitySymbol,
     equityBars,
-    equityStooq,
+    equityKey,
     setEquitySymbol,
     loading,
     error,
+    partialWarning,
     lastUpdated,
     load,
+    equityUnavailableReason,
   ])
 
   return <MarketDataContext.Provider value={value}>{children}</MarketDataContext.Provider>

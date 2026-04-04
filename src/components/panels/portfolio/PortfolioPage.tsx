@@ -9,13 +9,9 @@ import {
   formatPortfolioCachedAt,
   usePortfolioLifted,
 } from '../../../services/portfolio/portfolioApiContext'
-import {
-  closestCloseOnOrBefore,
-  fetchStooqDaily,
-  lastTwoCloses,
-  tickerToStooq,
-  type StooqBar,
-} from '../../../services/market/stooqDaily'
+import type { EodCloseBar } from '../../../services/market/dailyBarTypes'
+import { closestCloseOnOrBefore, lastTwoCloses } from '../../../services/market/eodBarUtils'
+import { fetchTiingoEodCloses } from '../../../services/market/tiingoBffClient'
 import {
   addDaysYmd,
   DEFAULT_FUNDING_FLOOR_YMD,
@@ -57,10 +53,10 @@ function tradeSortKey(t: { tradeDate: string; dateTime: string }) {
 type ChartMode = 'nav' | 'perf'
 
 const BENCHMARKS = [
-  { id: 'spy' as const, label: 'S&P 500', short: 'SPY', stooq: 'spy.us', color: '#888' },
-  { id: 'qqq' as const, label: 'Nasdaq 100', short: 'QQQ', stooq: 'qqq.us', color: '#378ADD' },
-  { id: 'iwm' as const, label: 'Russell 2000', short: 'IWM', stooq: 'iwm.us', color: '#7F77DD' },
-  { id: 'dia' as const, label: 'Dow', short: 'DIA', stooq: 'dia.us', color: '#ff6600' },
+  { id: 'spy' as const, label: 'S&P 500', short: 'SPY', sym: 'SPY', color: '#888' },
+  { id: 'qqq' as const, label: 'Nasdaq 100', short: 'QQQ', sym: 'QQQ', color: '#378ADD' },
+  { id: 'iwm' as const, label: 'Russell 2000', short: 'IWM', sym: 'IWM', color: '#7F77DD' },
+  { id: 'dia' as const, label: 'Dow', short: 'DIA', sym: 'DIA', color: '#ff6600' },
 ]
 type BenchId = (typeof BENCHMARKS)[number]['id']
 
@@ -74,7 +70,7 @@ type PerfRow = {
   diaPct: number | null
 }
 
-function buildPerfRows(navPts: IbkrNavHistoryPoint[], barsById: Partial<Record<BenchId, StooqBar[]>>): PerfRow[] {
+function buildPerfRows(navPts: IbkrNavHistoryPoint[], barsById: Partial<Record<BenchId, EodCloseBar[]>>): PerfRow[] {
   if (!navPts.length) return []
   const first = navPts[0]!
   const baseNav = first.total
@@ -110,7 +106,7 @@ function buildPerfRows(navPts: IbkrNavHistoryPoint[], barsById: Partial<Record<B
 type PfMainTab = 'overview' | 'holdings'
 
 export function PortfolioPage() {
-  const { token, queryId, fixtureUrl, usePortfolioApi, portfolioApiBase, portfolioPollMs } = getIbkrFlexEnv()
+  const { token, queryId, fixtureUrl, usePortfolioApi } = getIbkrFlexEnv()
   const canApi = usePortfolioApi
   // Browser Flex uses /ibkr-flex — only exists in Vite dev; production must use portfolio API (Render) or fixture.
   const canLiveDirect = import.meta.env.DEV && Boolean(token && queryId) && !canApi
@@ -147,7 +143,7 @@ export function PortfolioPage() {
     dia: false,
   })
 
-  const [benchSeries, setBenchSeries] = useState<Partial<Record<BenchId, StooqBar[]>>>({})
+  const [benchSeries, setBenchSeries] = useState<Partial<Record<BenchId, EodCloseBar[]>>>({})
   const [symSeries, setSymSeries] = useState<Record<string, number[]>>({})
   const [sym1d, setSym1d] = useState<Record<string, { pct: number }>>({})
   const [marketNote, setMarketNote] = useState<string | null>(null)
@@ -361,11 +357,11 @@ export function PortfolioPage() {
 
     ;(async () => {
       try {
-        const nextBench: Partial<Record<BenchId, StooqBar[]>> = {}
+        const nextBench: Partial<Record<BenchId, EodCloseBar[]>> = {}
         await Promise.all(
           BENCHMARKS.map(async (b) => {
             try {
-              const bars = await fetchStooqDaily(b.stooq, fund, lastY)
+              const bars = await fetchTiingoEodCloses(b.sym, fund, lastY)
               if (!cancel) nextBench[b.id] = bars
             } catch {
               /* skip benchmark */
@@ -380,7 +376,7 @@ export function PortfolioPage() {
         await Promise.all(
           symbols.map(async (sym) => {
             try {
-              const bars = await fetchStooqDaily(tickerToStooq(sym), sparkFrom, lastY)
+              const bars = await fetchTiingoEodCloses(sym, sparkFrom, lastY)
               if (cancel) return
               nextSeries[sym] = bars.map((b) => b.close)
               const pair = lastTwoCloses(bars)
@@ -401,7 +397,7 @@ export function PortfolioPage() {
           setBenchSeries({})
           setSymSeries({})
           setSym1d({})
-          setMarketNote('Benchmark / 1D data unavailable (network or Stooq). NAV-only charts still work.')
+          setMarketNote('Benchmark / 1D data unavailable (Tiingo or portfolio API). NAV-only charts still work.')
         }
       }
     })()
@@ -461,24 +457,7 @@ export function PortfolioPage() {
         </header>
 
         <div className="bb-ibkr-flex__body">
-          {canApi ? (
-            <p className="bb-fin-mutedHint">
-              Data stays warm while you use other modules: polling and Redis cache run at the app root. The server
-              refreshes IBKR Flex on a timer and stores JSON in Redis; the client pulls{' '}
-              <span className="mono">GET /api/portfolio</span> every <span className="mono">{Math.round(portfolioPollMs / 1000)}s</span>.
-              A copy of the last response is kept in <span className="mono">sessionStorage</span> for a fast return to
-              this tab. Use Refresh for an immediate <span className="mono">POST /api/portfolio/sync</span> (also writes Redis).
-              {portfolioApiBase ? (
-                <>
-                  {' '}
-                  · API base <span className="mono">{portfolioApiBase}</span>
-                </>
-              ) : (
-                ' · same-origin /api (Vite proxy)'
-              )}
-              .
-            </p>
-          ) : null}
+
 
           {!canApi && !canLiveDirect && !canFixture ? (
             <p className="bb-fin-mutedHint">
@@ -556,9 +535,7 @@ export function PortfolioPage() {
                       >
                         Total Returns {totalReturn.pct != null ? formatPctSigned(totalReturn.pct) : '—'}
                       </div>
-                      <div className="bb-pf-kpiBar__lbl muted" style={{ marginTop: 4 }}>
-                        vs fair cost (cash + position cost)
-                      </div>
+                      
                     </div>
                     <div className="bb-pf-kpiBar__sep" aria-hidden />
                     <div className="bb-pf-kpiBar__item">
@@ -588,9 +565,7 @@ export function PortfolioPage() {
                     <div className="bb-fin-metric bb-pf-metricCard">
                       <div className="bb-fin-metric__k">Fair cost (cash + cost basis)</div>
                       <div className="bb-fin-metric__v mono">{formatUsd(fairCostTotal)}</div>
-                      <div className="bb-fin-mutedHint bb-pf-metricHint">
-                        Settled cash + Σ position cost (summary) — principal deployed
-                      </div>
+
                     </div>
                     <div className="bb-fin-metric bb-pf-metricCard">
                       <div className="bb-fin-metric__k">Securities value (mark)</div>

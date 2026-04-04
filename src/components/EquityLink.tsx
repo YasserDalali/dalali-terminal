@@ -1,6 +1,6 @@
 import { Link, type LinkProps } from 'react-router-dom'
 import { normalizeEquitySymbol } from '../data/equitySymbol'
-import { equityHref } from '../navigation/equityRoutes'
+import { equityPath } from '../routes/modulePaths'
 
 export type EquityLinkVariant = 'inline' | 'pill'
 
@@ -25,7 +25,7 @@ export function EquityLink({
   const base = unstyled ? '' : variant === 'pill' ? 'bb-eq-peer' : 'bb-tkr-link'
   const cn = [base, className].filter(Boolean).join(' ')
   return (
-    <Link to={equityHref(s)} className={cn} {...rest}>
+    <Link to={equityPath(s)} className={cn} {...rest}>
       {children ?? s}
     </Link>
   )

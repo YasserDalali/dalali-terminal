@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { useNavigate } from 'react-router-dom'
 import { FinDataTable, type FinDataTableCol } from '../fin/FinDataTable'
 import { EquityLink } from '../EquityLink'
-import { equityHref } from '../../navigation/equityRoutes'
+import { equityPath } from '../../routes/modulePaths'
 import { BRAND_ACRONYM } from '../../data/brand'
 import { StripSparkline } from '../charts/StripSparkline'
 import {
@@ -31,6 +31,7 @@ import {
   heatmapTileOpacity,
 } from '../../services/market/marketConfig'
 import { useMarketData, type WatchlistRow } from '../../services/market/marketDataStore'
+import { MarketsMacroStrip } from './MarketsMacroStrip'
 
 function Pill({ children, positive }: { children: ReactNode; positive: boolean }) {
   return (
@@ -50,13 +51,23 @@ function formatRefreshMeta(lastUpdated: Date | null, tick: number): string {
 
 export function MarketsOverview() {
   const navigate = useNavigate()
-  const { indices, watchlist, heatmap, loading, error, lastUpdated, refresh, setEquitySymbol } = useMarketData()
+  const {
+    indices,
+    watchlist,
+    heatmap,
+    loading,
+    error,
+    partialWarning,
+    lastUpdated,
+    refresh,
+    setEquitySymbol,
+  } = useMarketData()
   const [tick, setTick] = useState(0)
 
   const openEquity = useCallback(
     (sym: string) => {
       setEquitySymbol(sym)
-      navigate(equityHref(sym))
+      navigate(equityPath(sym))
     },
     [navigate, setEquitySymbol],
   )
@@ -150,6 +161,11 @@ export function MarketsOverview() {
           {error}
         </p>
       ) : null}
+      {partialWarning ? (
+        <p className="mono muted" style={MARKETS_ERROR_TEXT_STYLE}>
+          {partialWarning}
+        </p>
+      ) : null}
 
       <div className="bb-strip" aria-label="Indices">
         {indices.map((a) => {
@@ -180,6 +196,8 @@ export function MarketsOverview() {
           )
         })}
       </div>
+
+      <MarketsMacroStrip />
 
       <div className="bb-split">
         <section className="bb-win">
@@ -246,12 +264,23 @@ export function MarketsOverview() {
                 key={t.sym}
                 symbol={t.sym}
                 unstyled
-                className="bb-heat__tile mono"
-                style={{
-                  opacity: heatmapTileOpacity(t.intensity),
-                  background: heatmapTileBackground(t.up, t.intensity),
-                }}
-                title={`${t.sym} ${t.changePct >= 0 ? '+' : ''}${t.changePct.toFixed(2)}%`}
+                className={`bb-heat__tile mono${t.unavailable ? ' bb-heat__tile--na' : ''}`}
+                style={
+                  t.unavailable || t.changePct == null
+                    ? {
+                        opacity: 0.4,
+                        background: 'rgba(48, 52, 58, 0.85)',
+                      }
+                    : {
+                        opacity: heatmapTileOpacity(t.intensity),
+                        background: heatmapTileBackground(t.up, t.intensity),
+                      }
+                }
+                title={
+                  t.unavailable || t.changePct == null
+                    ? `${t.sym} — no data`
+                    : `${t.sym} ${t.changePct >= 0 ? '+' : ''}${t.changePct.toFixed(2)}%`
+                }
               >
                 {t.sym}
               </EquityLink>
