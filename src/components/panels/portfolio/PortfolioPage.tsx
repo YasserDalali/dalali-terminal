@@ -50,6 +50,18 @@ function tradeSortKey(t: { tradeDate: string; dateTime: string }) {
   return `${t.tradeDate};${t.dateTime}`
 }
 
+type TradeHistoryRow = {
+  kind: 'trade' | 'group'
+  key: string
+  depth: 0 | 1
+  trade: IbkrTradeRow
+  count?: number
+}
+
+function tradeGroupKey(t: IbkrTradeRow): string {
+  return `${t.tradeDate}|${t.symbol}|${t.buySell}`
+}
+
 type ChartMode = 'nav' | 'perf'
 
 const BENCHMARKS = [
@@ -134,6 +146,8 @@ export function PortfolioPage() {
   const [chartMode, setChartMode] = useState<ChartMode>('nav')
   const [truncated, setTruncated] = useState(false)
   const [logScale, setLogScale] = useState(false)
+  const [aggregateTrades, setAggregateTrades] = useState(false)
+  const [expandedTradeGroups, setExpandedTradeGroups] = useState<Record<string, boolean>>({})
 
   const [navLines, setNavLines] = useState<NavSeriesVisibility>({ total: true, stock: true, cash: true })
   const [benchOn, setBenchOn] = useState<Record<BenchId, boolean>>({
@@ -193,73 +207,186 @@ export function PortfolioPage() {
     return [...data.trades].sort((a, b) => tradeSortKey(b).localeCompare(tradeSortKey(a)))
   }, [data?.trades])
 
-  const tradeColumns = useMemo((): FinDataTableCol<IbkrTradeRow>[] => {
+  const groupedTradeRows = useMemo((): TradeHistoryRow[] => {
+    if (!sortedTrades.length) return []
+    if (!aggregateTrades) {
+      return sortedTrades.map((t) => ({
+        kind: 'trade',
+        key: `${t.tradeID}-${t.dateTime}-${t.symbol}`,
+        depth: 0,
+        trade: t,
+      }))
+    }
+
+    const byGroup = new Map<string, IbkrTradeRow[]>()
+    for (const t of sortedTrades) {
+      const k = tradeGroupKey(t)
+      const arr = byGroup.get(k)
+      if (arr) arr.push(t)
+      else byGroup.set(k, [t])
+    }
+
+    const out: TradeHistoryRow[] = []
+    const groupEntries = [...byGroup.entries()].sort((a, b) => tradeSortKey(b[1][0]!).localeCompare(tradeSortKey(a[1][0]!)))
+    for (const [groupKey, trades] of groupEntries) {
+      if (trades.length <= 1) {
+        const t = trades[0]!
+        out.push({
+          kind: 'trade',
+          key: `${t.tradeID}-${t.dateTime}-${t.symbol}`,
+          depth: 0,
+          trade: t,
+        })
+        continue
+      }
+
+      const sorted = [...trades].sort((a, b) => tradeSortKey(b).localeCompare(tradeSortKey(a)))
+      const qty = sorted.reduce((s, t) => s + t.quantity, 0)
+      const absQty = sorted.reduce((s, t) => s + Math.abs(t.quantity), 0)
+      const weightedPx = absQty > 0 ? sorted.reduce((s, t) => s + t.tradePrice * Math.abs(t.quantity), 0) / absQty : 0
+      const proceeds = sorted.reduce((s, t) => s + t.proceeds, 0)
+      const netCash = sorted.reduce((s, t) => s + t.netCash, 0)
+      const ibCommission = sorted.reduce((s, t) => s + t.ibCommission, 0)
+      const fifoPnlRealized = sorted.reduce((s, t) => s + t.fifoPnlRealized, 0)
+      const mtmPnl = sorted.reduce((s, t) => s + t.mtmPnl, 0)
+      const top = sorted[0]!
+
+      const aggregateTrade: IbkrTradeRow = {
+        ...top,
+        tradeID: `agg:${groupKey}`,
+        quantity: qty,
+        tradePrice: weightedPx,
+        proceeds,
+        netCash,
+        ibCommission,
+        fifoPnlRealized,
+        mtmPnl,
+        description: `${top.description || top.symbol} (${sorted.length} fills)`,
+      }
+
+      out.push({
+        kind: 'group',
+        key: `grp:${groupKey}`,
+        depth: 0,
+        trade: aggregateTrade,
+        count: sorted.length,
+      })
+
+      if (expandedTradeGroups[groupKey]) {
+        for (const t of sorted) {
+          out.push({
+            kind: 'trade',
+            key: `sub:${t.tradeID}-${t.dateTime}-${t.symbol}`,
+            depth: 1,
+            trade: t,
+          })
+        }
+      }
+    }
+    return out
+  }, [aggregateTrades, expandedTradeGroups, sortedTrades])
+
+  const tradeColumns = useMemo((): FinDataTableCol<TradeHistoryRow>[] => {
     return [
       {
         key: 'd',
         header: 'Date',
-        cell: (t) => <span className="mono">{formatFlexYyyymmdd(t.tradeDate)}</span>,
-        searchText: (t) => `${t.tradeDate} ${t.symbol} ${t.description}`,
+        cell: (row) => {
+          const t = row.trade
+          const groupKey = tradeGroupKey(t)
+          const isGroup = row.kind === 'group'
+          const expanded = Boolean(expandedTradeGroups[groupKey])
+          return (
+            <span className="mono" style={{ paddingLeft: row.depth === 1 ? 16 : 0 }}>
+              {isGroup ? (
+                <button
+                  type="button"
+                  className="bb-pf-chip bb-pf-chip--sm"
+                  onClick={() =>
+                    setExpandedTradeGroups((prev) => ({
+                      ...prev,
+                      [groupKey]: !prev[groupKey],
+                    }))
+                  }
+                  title={expanded ? 'Hide sub-orders' : 'Show sub-orders'}
+                >
+                  {expanded ? '▾' : '▸'} {formatFlexYyyymmdd(t.tradeDate)}
+                </button>
+              ) : (
+                formatFlexYyyymmdd(t.tradeDate)
+              )}
+            </span>
+          )
+        },
+        searchText: (row) => `${row.trade.tradeDate} ${row.trade.symbol} ${row.trade.description}`,
       },
       {
         key: 'tm',
         header: 'Time',
-        cell: (t) => {
+        cell: (row) => {
+          const t = row.trade
           const [, timePart] = t.dateTime.split(';')
           return <span className="mono">{timePart ?? '—'}</span>
         },
-        searchText: (t) => t.dateTime,
+        searchText: (row) => row.trade.dateTime,
       },
       {
         key: 'sym',
         header: 'Symbol',
-        cell: (t) => <span className="mono">{t.symbol}</span>,
-        searchText: (t) => t.symbol,
+        cell: (row) => <span className="mono">{row.trade.symbol}</span>,
+        searchText: (row) => row.trade.symbol,
       },
-      { key: 'bs', header: 'B/S', cell: (t) => t.buySell, searchText: (t) => t.buySell },
+      {
+        key: 'bs',
+        header: 'B/S',
+        cell: (row) => row.trade.buySell,
+        searchText: (row) => row.trade.buySell,
+      },
       {
         key: 'qty',
         header: 'Qty',
         className: 'bb-grid__r mono',
         thClassName: 'bb-grid__r',
-        cell: (t) => t.quantity,
-        searchText: (t) => String(t.quantity),
+        cell: (row) => row.trade.quantity,
+        searchText: (row) => String(row.trade.quantity),
       },
       {
         key: 'px',
         header: 'Price',
         className: 'bb-grid__r mono',
         thClassName: 'bb-grid__r',
-        cell: (t) => formatUsd(t.tradePrice),
+        cell: (row) => formatUsd(row.trade.tradePrice),
       },
       {
         key: 'proc',
         header: 'Proceeds',
         className: 'bb-grid__r mono',
         thClassName: 'bb-grid__r',
-        cell: (t) => formatUsd(t.proceeds),
+        cell: (row) => formatUsd(row.trade.proceeds),
       },
       {
         key: 'net',
         header: 'Net cash',
         className: 'bb-grid__r mono',
         thClassName: 'bb-grid__r',
-        cell: (t) => formatUsd(t.netCash),
+        cell: (row) => formatUsd(row.trade.netCash),
       },
       {
         key: 'comm',
         header: 'Comm',
         className: 'bb-grid__r mono',
         thClassName: 'bb-grid__r',
-        cell: (t) => formatUsd(t.ibCommission),
+        cell: (row) => formatUsd(row.trade.ibCommission),
       },
       {
         key: 'real',
         header: 'Real P&L',
         className: 'bb-grid__r mono',
         thClassName: 'bb-grid__r',
-        cell: (t) => (
-          <span className={t.fifoPnlRealized >= 0 ? 'pos' : 'neg'}>{formatUsdSigned(t.fifoPnlRealized)}</span>
+        cell: (row) => (
+          <span className={row.trade.fifoPnlRealized >= 0 ? 'pos' : 'neg'}>
+            {formatUsdSigned(row.trade.fifoPnlRealized)}
+          </span>
         ),
       },
       {
@@ -267,10 +394,10 @@ export function PortfolioPage() {
         header: 'MTM P&L',
         className: 'bb-grid__r mono',
         thClassName: 'bb-grid__r',
-        cell: (t) => <span className={t.mtmPnl >= 0 ? 'pos' : 'neg'}>{formatUsdSigned(t.mtmPnl)}</span>,
+        cell: (row) => <span className={row.trade.mtmPnl >= 0 ? 'pos' : 'neg'}>{formatUsdSigned(row.trade.mtmPnl)}</span>,
       },
     ]
-  }, [])
+  }, [expandedTradeGroups])
 
   const cn = data?.changeInNav
   const settledCash = data?.cashSummary?.endingSettledCash ?? 0
@@ -689,7 +816,15 @@ export function PortfolioPage() {
                             key={k}
                             type="button"
                             className={`bb-pf-chip bb-pf-chip--sm${on ? ' bb-pf-chip--on' : ''}`}
-                            onClick={() => setNavLines((v) => ({ ...v, [k]: !v[k] }))}
+                            onClick={() =>
+                              setNavLines((v) => {
+                                const next = { ...v, [k]: !v[k] }
+                                if (!next.total && !next.stock && !next.cash) {
+                                  return v
+                                }
+                                return next
+                              })
+                            }
                           >
                             {label}
                           </button>
@@ -757,12 +892,25 @@ export function PortfolioPage() {
                   <FinDataTable
                     className="bb-pf-finTable"
                     title={<span className="bb-eq-sec__ttl">Trade history</span>}
-                    rows={sortedTrades}
+                    rows={groupedTradeRows}
                     columns={tradeColumns}
-                    rowKey={(t) => `${t.tradeID}-${t.dateTime}-${t.symbol}`}
+                    rowKey={(row) => row.key}
                     pageSize={20}
                     searchPlaceholder="Search trades…"
                     emptyText="No trades in this statement."
+                    toolbarExtras={
+                      <button
+                        type="button"
+                        className={`bb-pf-chip bb-pf-chip--sm${aggregateTrades ? ' bb-pf-chip--on' : ''}`}
+                        onClick={() => {
+                          setAggregateTrades((v) => !v)
+                          setExpandedTradeGroups({})
+                        }}
+                        title="Group split fills by day/symbol/side"
+                      >
+                        {aggregateTrades ? 'Aggregated' : 'Aggregate micro fills'}
+                      </button>
+                    }
                   />
                 </div>
               )}

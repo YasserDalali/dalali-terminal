@@ -12,6 +12,7 @@ export function FinDataTableShell<T>({
   filterRow,
   children,
   className,
+  toolbarExtras,
 }: {
   rows: T[]
   pageSize?: number
@@ -20,6 +21,7 @@ export function FinDataTableShell<T>({
   filterRow: (row: T, queryLower: string) => boolean
   children: (pagedRows: T[], ctx: { total: number; filtered: number; page: number; pages: number }) => ReactNode
   className?: string
+  toolbarExtras?: ReactNode
 }) {
   const [q, setQ] = useState('')
   const [page, setPage] = useState(0)
@@ -55,6 +57,7 @@ export function FinDataTableShell<T>({
         <span className="bb-finDataTable__meta mono muted">
           {rows.length === 0 ? '0' : filtered.length === rows.length ? `${rows.length}` : `${filtered.length} / ${rows.length}`}
         </span>
+        {toolbarExtras ? <div className="bb-finDataTable__extras">{toolbarExtras}</div> : null}
         {filtered.length > pageSize ? (
           <div className="bb-finDataTable__pager">
             <button
@@ -117,6 +120,7 @@ type FinDataTableProps<T> = {
   className?: string
   /** When set, rows are clickable (e.g. open detail). */
   onRowClick?: (row: T) => void
+  toolbarExtras?: ReactNode
 }
 
 export function FinDataTable<T>({
@@ -129,6 +133,7 @@ export function FinDataTable<T>({
   title,
   className,
   onRowClick,
+  toolbarExtras,
 }: FinDataTableProps<T>) {
   const filterRow = useMemo(
     () => (row: T, ql: string) => {
@@ -146,6 +151,7 @@ export function FinDataTable<T>({
       searchPlaceholder={searchPlaceholder}
       filterRow={filterRow}
       className={className}
+      toolbarExtras={toolbarExtras}
     >
       {(pageRows) => (
         <table className="bb-grid">

@@ -157,36 +157,45 @@ export function PortfolioLightweightChart(props: Props) {
           },
         },
         series: [
-          {
-            type: 'line',
-            name: 'Total NAV',
-            show: navLines.total,
-            showSymbol: false,
-            data: navRows.map((r) => r.total),
-            lineStyle: { width: 2, color: '#0f0' },
-            areaStyle: {
-              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-                { offset: 0, color: 'rgba(0,255,80,0.22)' },
-                { offset: 1, color: 'rgba(0,0,0,0)' },
-              ]),
-            },
-          },
-          {
-            type: 'line',
-            name: 'Stock',
-            show: navLines.stock,
-            showSymbol: false,
-            data: navRows.map((r) => r.stock),
-            lineStyle: { width: 2, color: '#ff6600' },
-          },
-          {
-            type: 'line',
-            name: 'Cash',
-            show: navLines.cash,
-            showSymbol: false,
-            data: navRows.map((r) => r.cash),
-            lineStyle: { width: 2, color: '#7F77DD' },
-          },
+          ...(navLines.total
+            ? [
+                {
+                  type: 'line',
+                  name: 'Total NAV',
+                  showSymbol: false,
+                  data: navRows.map((r) => r.total),
+                  lineStyle: { width: 2, color: '#0f0' },
+                  areaStyle: {
+                    color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                      { offset: 0, color: 'rgba(0,255,80,0.22)' },
+                      { offset: 1, color: 'rgba(0,0,0,0)' },
+                    ]),
+                  },
+                },
+              ]
+            : []),
+          ...(navLines.stock
+            ? [
+                {
+                  type: 'line',
+                  name: 'Stock',
+                  showSymbol: false,
+                  data: navRows.map((r) => r.stock),
+                  lineStyle: { width: 2, color: '#ff6600' },
+                },
+              ]
+            : []),
+          ...(navLines.cash
+            ? [
+                {
+                  type: 'line',
+                  name: 'Cash',
+                  showSymbol: false,
+                  data: navRows.map((r) => r.cash),
+                  lineStyle: { width: 2, color: '#7F77DD' },
+                },
+              ]
+            : []),
         ],
       })
     } else {

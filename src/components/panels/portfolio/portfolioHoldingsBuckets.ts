@@ -58,6 +58,8 @@ export function aggregateHoldingsBuckets(positions: IbkrPositionRow[], settledCa
 
 export type SankeyLink = { source: number; target: number; value: number }
 
+const RESERVED_SLEEVE_NAMES = new Set(['portfolio', 'equities', 'cash', 'bonds', 'etfs', 'stocks'])
+
 function mergeBySymbol(positions: IbkrPositionRow[], bucket: HoldingsBucket): Map<string, number> {
   const m = new Map<string, number>()
   for (const p of positions) {
@@ -74,6 +76,12 @@ function sortedTickerEntries(m: Map<string, number>, minV: number): [string, num
   return [...m.entries()]
     .filter(([, v]) => v >= minV)
     .sort((a, b) => b[1] - a[1])
+}
+
+function asTickerNodeName(sym: string): string {
+  const clean = (sym ?? '').trim() || '—'
+  if (RESERVED_SLEEVE_NAMES.has(clean.toLowerCase())) return `${clean} (ticker)`
+  return clean
 }
 
 /**
@@ -116,7 +124,7 @@ export function buildAllocationSankey(
   }
   if (hasCash) {
     ix.cash = next
-    nodes.push({ name: 'Cash' })
+    nodes.push({ name: 'Cash balance' })
     links.push({ source: 0, target: next, value: Math.max(b.cash, minV) })
     next += 1
   }
@@ -135,7 +143,7 @@ export function buildAllocationSankey(
       next += 1
       if (etfTickers.length > 0) {
         for (const [sym, v] of etfTickers) {
-          nodes.push({ name: sym })
+          nodes.push({ name: asTickerNodeName(sym) })
           links.push({ source: ix.etfHub, target: next, value: Math.max(v, minV) })
           next += 1
         }
@@ -152,7 +160,7 @@ export function buildAllocationSankey(
       next += 1
       if (stockTickers.length > 0) {
         for (const [sym, v] of stockTickers) {
-          nodes.push({ name: sym })
+          nodes.push({ name: asTickerNodeName(sym) })
           links.push({ source: ix.stockHub, target: next, value: Math.max(v, minV) })
           next += 1
         }

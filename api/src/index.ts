@@ -29,6 +29,7 @@ import {
 import { registerExternalMarketRoutes } from './externalMarketRoutes.js'
 
 const REDIS_KEY = process.env.PORTFOLIO_REDIS_KEY ?? 'dalali:portfolio:payload'
+const PORTFOLIO_TTL_SEC = Math.max(60, Number(process.env.PORTFOLIO_CACHE_TTL_SEC ?? 3600))
 const PORT = Number(process.env.PORT ?? process.env.PORTFOLIO_API_PORT ?? 8787)
 const POLL_MS = Math.max(10_000, Number(process.env.PORTFOLIO_POLL_MS ?? 120_000))
 const FLEX_BASE =
@@ -46,6 +47,7 @@ type RedisC = ReturnType<typeof createClient>
 let redis: RedisC | null = null
 let pollTimer: ReturnType<typeof setInterval> | null = null
 let refreshInFlight = false
+let redisConnectPromise: Promise<RedisC> | null = null
 
 /** Log target host:port only (no password). */
 function redisUrlForLog(raw: string): string {
@@ -69,19 +71,80 @@ function assertRedisUrlWhenHosted(): void {
 
 async function getRedis(): Promise<RedisC> {
   if (redis?.isOpen) return redis
+  if (redisConnectPromise) return redisConnectPromise
+
   const url = process.env.REDIS_URL?.trim() || 'redis://127.0.0.1:6379'
-  const client = createClient({ url })
+  const client = createClient({
+    url,
+    socket: {
+      connectTimeout: Math.max(5000, Number(process.env.REDIS_CONNECT_TIMEOUT_MS ?? 15000)),
+      keepAlive: Math.max(1000, Number(process.env.REDIS_KEEPALIVE_MS ?? 5000)),
+      reconnectStrategy: (retries) => {
+        const maxRetries = Math.max(3, Number(process.env.REDIS_MAX_RETRIES ?? 50))
+        if (retries >= maxRetries) return false
+        return Math.min(500 + retries * 250, 5000)
+      },
+    },
+    pingInterval: Math.max(10_000, Number(process.env.REDIS_PING_INTERVAL_MS ?? 30_000)),
+  })
   client.on('error', (err) => console.error('[redis]', err))
-  await client.connect()
-  redis = client
-  console.log('[redis] connected', redisUrlForLog(url))
-  return redis
+  client.on('end', () => {
+    if (redis === client) {
+      redis = null
+    }
+  })
+
+  redisConnectPromise = (async () => {
+    await client.connect()
+    redis = client
+    console.log('[redis] connected', redisUrlForLog(url))
+    return client
+  })()
+
+  try {
+    return await redisConnectPromise
+  } finally {
+    redisConnectPromise = null
+  }
+}
+
+async function resetRedisClient(): Promise<void> {
+  if (!redis) return
+  const current = redis
+  redis = null
+  try {
+    if (current.isOpen) {
+      await current.quit()
+    }
+  } catch {
+    try {
+      current.disconnect()
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+function isRetryableRedisError(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e)
+  return /ECONNRESET|Socket closed unexpectedly|Connection timeout|ClientClosedError/i.test(msg)
+}
+
+async function withRedisRetry<T>(fn: (r: RedisC) => Promise<T>): Promise<T> {
+  try {
+    const r = await getRedis()
+    return await fn(r)
+  } catch (e) {
+    if (!isRetryableRedisError(e)) throw e
+    await resetRedisClient()
+    const r = await getRedis()
+    return await fn(r)
+  }
 }
 
 async function readCache(): Promise<CacheEnvelope | null> {
   try {
-    const r = await getRedis()
-    const raw = await r.get(REDIS_KEY)
+    const raw = await withRedisRetry((r) => r.get(REDIS_KEY))
     if (!raw) return null
     return JSON.parse(raw) as CacheEnvelope
   } catch (e) {
@@ -91,8 +154,7 @@ async function readCache(): Promise<CacheEnvelope | null> {
 }
 
 async function writeCache(env: CacheEnvelope): Promise<void> {
-  const r = await getRedis()
-  await r.set(REDIS_KEY, JSON.stringify(env))
+  await withRedisRetry((r) => r.setEx(REDIS_KEY, PORTFOLIO_TTL_SEC, JSON.stringify(env)))
 }
 
 async function refreshFromIbkr(): Promise<CacheEnvelope> {

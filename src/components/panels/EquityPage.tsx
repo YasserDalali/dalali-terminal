@@ -41,6 +41,7 @@ export function EquityPage() {
   }, [rawSymbol, setEquitySymbol])
   const [tab, setTab] = useState<EquityTab>('Overview')
   const [range, setRange] = useState<(typeof q.ranges)[number]>('1D')
+  const [chartType, setChartType] = useState<'candles' | 'line'>('candles')
 
   const liveOk = Number.isFinite(q.price)
   const up = liveOk && q.change >= 0
@@ -174,6 +175,22 @@ export function EquityPage() {
                     {r}
                   </button>
                 ))}
+                <button
+                  type="button"
+                  className={`bb-eq-iconbtn${chartType === 'candles' ? ' bb-eq-range__b--on' : ''}`}
+                  onClick={() => setChartType('candles')}
+                  title="Show candlesticks when OHLC data is available"
+                >
+                  CANDLES
+                </button>
+                <button
+                  type="button"
+                  className={`bb-eq-iconbtn${chartType === 'line' ? ' bb-eq-range__b--on' : ''}`}
+                  onClick={() => setChartType('line')}
+                  title="Show line chart"
+                >
+                  LINE
+                </button>
                 <span className="bb-eq-range__fill" />
                 <button type="button" className="bb-eq-iconbtn" disabled title="Not implemented">
                   CMP
@@ -190,6 +207,7 @@ export function EquityPage() {
                     price={q.price}
                     up={up}
                     seed={priceSeed}
+                    chartType={chartType}
                     closes={equityChartCloses(range)}
                     ohlcv={sliceOhlcvForRange(equityBars, range)}
                   />

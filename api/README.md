@@ -28,6 +28,12 @@ If the service is set to **Docker**, this folder now includes a `Dockerfile`. Ke
 
 Optional: `DATABASE_URL`, `PORTFOLIO_POLL_MS` (≥10000), `PORTFOLIO_REDIS_KEY`.
 
+Caching defaults to Redis with a 1-hour TTL:
+- portfolio cache key TTL: `PORTFOLIO_CACHE_TTL_SEC` (default `3600`)
+- external market cache TTL: `MARKET_CACHE_TTL_SEC` (default `3600`; per-provider overrides still supported)
+
+Manual reload is supported on market data routes by adding `reload=1` (or `refresh=1`) to the query string; this bypasses the current cache entry, fetches fresh data, and repopulates Redis.
+
 ## Vercel (frontend)
 
 The repo includes **`.env.production`** with `VITE_PORTFOLIO_API_BASE` pointing at the Render API so `vite build` (and Vercel) call `https://…onrender.com/api/...` instead of same-origin `/api` (which 404s on static hosting).

@@ -22,13 +22,14 @@ import {
 
 type RedisC = ReturnType<typeof createClient>
 
-const TTL_FRED = Math.max(60, Number(process.env.MARKET_CACHE_TTL_FRED_SEC ?? 600))
-const TTL_FRED_SNAPSHOT = Math.max(120, Number(process.env.MARKET_CACHE_TTL_FRED_SNAPSHOT_SEC ?? 900))
-const TTL_TIINGO = Math.max(30, Number(process.env.MARKET_CACHE_TTL_TIINGO_SEC ?? 120))
+const DEFAULT_MARKET_TTL_SEC = Math.max(60, Number(process.env.MARKET_CACHE_TTL_SEC ?? 3600))
+const TTL_FRED = Math.max(60, Number(process.env.MARKET_CACHE_TTL_FRED_SEC ?? DEFAULT_MARKET_TTL_SEC))
+const TTL_FRED_SNAPSHOT = Math.max(60, Number(process.env.MARKET_CACHE_TTL_FRED_SNAPSHOT_SEC ?? DEFAULT_MARKET_TTL_SEC))
+const TTL_TIINGO = Math.max(60, Number(process.env.MARKET_CACHE_TTL_TIINGO_SEC ?? DEFAULT_MARKET_TTL_SEC))
 const TTL_TIINGO_META = Math.max(300, Number(process.env.MARKET_CACHE_TTL_TIINGO_META_SEC ?? 3600))
 const TTL_TIINGO_FUND = Math.max(300, Number(process.env.MARKET_CACHE_TTL_TIINGO_FUND_SEC ?? 3600))
-const TTL_TIINGO_NEWS = Math.max(60, Number(process.env.MARKET_CACHE_TTL_TIINGO_NEWS_SEC ?? 600))
-const TTL_ALPACA = Math.max(15, Number(process.env.MARKET_CACHE_TTL_ALPACA_SEC ?? 60))
+const TTL_TIINGO_NEWS = Math.max(60, Number(process.env.MARKET_CACHE_TTL_TIINGO_NEWS_SEC ?? DEFAULT_MARKET_TTL_SEC))
+const TTL_ALPACA = Math.max(60, Number(process.env.MARKET_CACHE_TTL_ALPACA_SEC ?? DEFAULT_MARKET_TTL_SEC))
 
 function fredKey(): string | null {
   const k = process.env.FRED_API_KEY?.trim()
@@ -53,15 +54,18 @@ async function cacheOrRun(
   redis: RedisC,
   key: string,
   ttlSec: number,
+  forceRefresh: boolean,
   work: () => Promise<unknown>,
 ): Promise<{ cached: boolean; data: unknown }> {
-  try {
-    const raw = await redis.get(key)
-    if (raw) {
-      return { cached: true, data: JSON.parse(raw) as unknown }
+  if (!forceRefresh) {
+    try {
+      const raw = await redis.get(key)
+      if (raw) {
+        return { cached: true, data: JSON.parse(raw) as unknown }
+      }
+    } catch {
+      /* serve fresh if Redis missing */
     }
-  } catch {
-    /* serve fresh if Redis missing */
   }
   const data = await work()
   try {
@@ -70,6 +74,11 @@ async function cacheOrRun(
     /* ignore */
   }
   return { cached: false, data }
+}
+
+function wantsRefresh(req: Request): boolean {
+  const v = String(req.query.reload ?? req.query.refresh ?? '').trim().toLowerCase()
+  return v === '1' || v === 'true' || v === 'yes'
 }
 
 export function registerExternalMarketRoutes(app: Express, getRedis: () => Promise<RedisC>): void {
@@ -95,10 +104,11 @@ export function registerExternalMarketRoutes(app: Express, getRedis: () => Promi
       limitRaw != null && Number.isFinite(limitRaw) ? Math.min(10_000, Math.max(1, Math.floor(limitRaw))) : undefined
 
     const cacheKey = `dalali:ext:fred:obs:${series_id}:${observation_start ?? ''}:${observation_end ?? ''}:${limit ?? ''}`
+    const forceRefresh = wantsRefresh(req)
 
     try {
       const redis = await getRedis()
-      const { cached, data } = await cacheOrRun(redis, cacheKey, TTL_FRED, async () => {
+      const { cached, data } = await cacheOrRun(redis, cacheKey, TTL_FRED, forceRefresh, async () => {
         const raw = await fetchFredObservations(apiKey, {
           series_id,
           observation_start,
@@ -107,23 +117,24 @@ export function registerExternalMarketRoutes(app: Express, getRedis: () => Promi
         })
         return { observations: normalizeFredObservations(raw) }
       })
-      res.json({ ok: true, cached, series_id, ...((data as object) ?? {}) })
+      res.json({ ok: true, cached, reloaded: forceRefresh && !cached, series_id, ...((data as object) ?? {}) })
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       res.status(502).json({ ok: false, error: msg })
     }
   })
 
-  app.get('/api/macro/fred/snapshot', async (_req: Request, res: Response) => {
+  app.get('/api/macro/fred/snapshot', async (req: Request, res: Response) => {
     const apiKey = fredKey()
     if (!apiKey) {
       res.status(503).json({ ok: false, error: 'FRED_API_KEY not configured' })
       return
     }
     const cacheKey = 'dalali:ext:fred:snapshot:v1'
+    const forceRefresh = wantsRefresh(req)
     try {
       const redis = await getRedis()
-      const { cached, data } = await cacheOrRun(redis, cacheKey, TTL_FRED_SNAPSHOT, async () => {
+      const { cached, data } = await cacheOrRun(redis, cacheKey, TTL_FRED_SNAPSHOT, forceRefresh, async () => {
         const items = await Promise.all(
           MACRO_FRED_SERIES.map(async (preset) => {
             const raw = await fetchFredObservations(apiKey, {
@@ -144,7 +155,7 @@ export function registerExternalMarketRoutes(app: Express, getRedis: () => Promi
         )
         return { items, fetchedAt: new Date().toISOString() }
       })
-      res.json({ ok: true, cached, ...(data as object) })
+      res.json({ ok: true, cached, reloaded: forceRefresh && !cached, ...(data as object) })
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       res.status(502).json({ ok: false, error: msg })
@@ -165,13 +176,14 @@ export function registerExternalMarketRoutes(app: Express, getRedis: () => Promi
     const startDate = req.query.startDate ? String(req.query.startDate) : undefined
     const endDate = req.query.endDate ? String(req.query.endDate) : undefined
     const cacheKey = `dalali:ext:tiingo:daily:${symbol.toUpperCase()}:${startDate ?? ''}:${endDate ?? ''}`
+    const forceRefresh = wantsRefresh(req)
     try {
       const redis = await getRedis()
-      const { cached, data } = await cacheOrRun(redis, cacheKey, TTL_TIINGO, async () => {
+      const { cached, data } = await cacheOrRun(redis, cacheKey, TTL_TIINGO, forceRefresh, async () => {
         const prices = await fetchTiingoDailyPrices(token, symbol, { startDate, endDate })
         return { symbol: symbol.toUpperCase(), prices }
       })
-      res.json({ ok: true, cached, ...(data as object) })
+      res.json({ ok: true, cached, reloaded: forceRefresh && !cached, ...(data as object) })
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       res.status(502).json({ ok: false, error: msg })
@@ -190,12 +202,13 @@ export function registerExternalMarketRoutes(app: Express, getRedis: () => Promi
       return
     }
     const cacheKey = `dalali:ext:tiingo:meta:${symbol.toUpperCase()}`
+    const forceRefresh = wantsRefresh(req)
     try {
       const redis = await getRedis()
-      const { cached, data } = await cacheOrRun(redis, cacheKey, TTL_TIINGO_META, async () =>
+      const { cached, data } = await cacheOrRun(redis, cacheKey, TTL_TIINGO_META, forceRefresh, async () =>
         fetchTiingoDailyMeta(token, symbol),
       )
-      res.json({ ok: true, cached, symbol: symbol.toUpperCase(), data })
+      res.json({ ok: true, cached, reloaded: forceRefresh && !cached, symbol: symbol.toUpperCase(), data })
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       res.status(502).json({ ok: false, error: msg })
@@ -217,12 +230,13 @@ export function registerExternalMarketRoutes(app: Express, getRedis: () => Promi
     const endDate = req.query.endDate ? String(req.query.endDate) : undefined
     const asReported = String(req.query.asReported ?? '') === '1' || String(req.query.asReported ?? '') === 'true'
     const cacheKey = `dalali:ext:tiingo:fund:stmt:${symbol.toUpperCase()}:${startDate ?? ''}:${endDate ?? ''}:${asReported}`
+    const forceRefresh = wantsRefresh(req)
     try {
       const redis = await getRedis()
-      const { cached, data } = await cacheOrRun(redis, cacheKey, TTL_TIINGO_FUND, async () =>
+      const { cached, data } = await cacheOrRun(redis, cacheKey, TTL_TIINGO_FUND, forceRefresh, async () =>
         fetchTiingoFundamentalsStatements(token, symbol, { startDate, endDate, asReported }),
       )
-      res.json({ ok: true, cached, symbol: symbol.toUpperCase(), data })
+      res.json({ ok: true, cached, reloaded: forceRefresh && !cached, symbol: symbol.toUpperCase(), data })
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       res.status(502).json({ ok: false, error: msg })
@@ -243,12 +257,13 @@ export function registerExternalMarketRoutes(app: Express, getRedis: () => Promi
     const startDate = req.query.startDate ? String(req.query.startDate) : undefined
     const endDate = req.query.endDate ? String(req.query.endDate) : undefined
     const cacheKey = `dalali:ext:tiingo:fund:daily:${symbol.toUpperCase()}:${startDate ?? ''}:${endDate ?? ''}`
+    const forceRefresh = wantsRefresh(req)
     try {
       const redis = await getRedis()
-      const { cached, data } = await cacheOrRun(redis, cacheKey, TTL_TIINGO_FUND, async () =>
+      const { cached, data } = await cacheOrRun(redis, cacheKey, TTL_TIINGO_FUND, forceRefresh, async () =>
         fetchTiingoFundamentalsDaily(token, symbol, { startDate, endDate }),
       )
-      res.json({ ok: true, cached, symbol: symbol.toUpperCase(), data })
+      res.json({ ok: true, cached, reloaded: forceRefresh && !cached, symbol: symbol.toUpperCase(), data })
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       res.status(502).json({ ok: false, error: msg })
@@ -267,12 +282,13 @@ export function registerExternalMarketRoutes(app: Express, getRedis: () => Promi
       return
     }
     const cacheKey = `dalali:ext:tiingo:fund:def:${tickers}`
+    const forceRefresh = wantsRefresh(req)
     try {
       const redis = await getRedis()
-      const { cached, data } = await cacheOrRun(redis, cacheKey, TTL_TIINGO_FUND, async () =>
+      const { cached, data } = await cacheOrRun(redis, cacheKey, TTL_TIINGO_FUND, forceRefresh, async () =>
         fetchTiingoFundamentalsDefinitions(token, tickers),
       )
-      res.json({ ok: true, cached, data })
+      res.json({ ok: true, cached, reloaded: forceRefresh && !cached, data })
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       res.status(502).json({ ok: false, error: msg })
@@ -295,12 +311,13 @@ export function registerExternalMarketRoutes(app: Express, getRedis: () => Promi
     const startDate = req.query.startDate ? String(req.query.startDate) : undefined
     const endDate = req.query.endDate ? String(req.query.endDate) : undefined
     const cacheKey = `dalali:ext:tiingo:news:${tickers}:${limit}:${startDate ?? ''}:${endDate ?? ''}`
+    const forceRefresh = wantsRefresh(req)
     try {
       const redis = await getRedis()
-      const { cached, data } = await cacheOrRun(redis, cacheKey, TTL_TIINGO_NEWS, async () =>
+      const { cached, data } = await cacheOrRun(redis, cacheKey, TTL_TIINGO_NEWS, forceRefresh, async () =>
         fetchTiingoNews(token, { tickers, limit, startDate, endDate }),
       )
-      res.json({ ok: true, cached, data })
+      res.json({ ok: true, cached, reloaded: forceRefresh && !cached, data })
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       res.status(502).json({ ok: false, error: msg })
@@ -326,9 +343,10 @@ export function registerExternalMarketRoutes(app: Express, getRedis: () => Promi
     const end = req.query.end ? String(req.query.end) : undefined
 
     const cacheKey = `dalali:ext:alpaca:bars:${symbols}:${timeframe}:${limit}:${start ?? ''}:${end ?? ''}:${cred.feed ?? ''}`
+    const forceRefresh = wantsRefresh(req)
     try {
       const redis = await getRedis()
-      const { cached, data } = await cacheOrRun(redis, cacheKey, TTL_ALPACA, async () => {
+      const { cached, data } = await cacheOrRun(redis, cacheKey, TTL_ALPACA, forceRefresh, async () => {
         const body = await fetchAlpacaStockBars(cred.keyId, cred.secret, cred.restUrl, {
           symbols,
           timeframe,
@@ -339,7 +357,7 @@ export function registerExternalMarketRoutes(app: Express, getRedis: () => Promi
         })
         return body
       })
-      res.json({ ok: true, cached, ...(data as object) })
+      res.json({ ok: true, cached, reloaded: forceRefresh && !cached, ...(data as object) })
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       res.status(502).json({ ok: false, error: msg })

@@ -32,11 +32,12 @@ export function EquityPriceChart(props: {
   price: number
   up: boolean
   seed: number
+  chartType?: 'candles' | 'line'
   points?: number
   closes?: number[]
   ohlcv?: DailyOhlcvBar[]
 }) {
-  const { prevClose, price, up, seed, points = 24, closes, ohlcv } = props
+  const { prevClose, price, up, seed, chartType = 'candles', points = 24, closes, ohlcv } = props
   const wrapRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<EChartsType | null>(null)
 
@@ -46,7 +47,8 @@ export function EquityPriceChart(props: {
 
     const stroke = up ? '#0f0' : '#f44'
     const [g0, g1] = areaGradientColors(up)
-    const useCandles = ohlcv && ohlcv.length >= 2
+    const hasOhlcv = Boolean(ohlcv && ohlcv.length >= 2)
+    const useCandles = chartType === 'candles' && hasOhlcv
 
     const graphicWatermark = {
       type: 'text' as const,
@@ -201,7 +203,7 @@ export function EquityPriceChart(props: {
       chart.dispose()
       chartRef.current = null
     }
-  }, [closes, ohlcv, points, prevClose, price, seed, up])
+  }, [chartType, closes, ohlcv, points, prevClose, price, seed, up])
 
   return <div ref={wrapRef} className="bb-eq-chart__chart" aria-hidden="true" />
 }
