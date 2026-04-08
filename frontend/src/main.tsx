@@ -3,8 +3,8 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import './index.css'
 import App from './App.tsx'
-import { MarketDataProvider } from './services/market/marketDataStore'
-import { PortfolioDataProvider } from './services/portfolio/portfolioApiContext'
+import { MarketDataProvider } from './services/market/marketDataStore.tsx'
+import { PortfolioDataProvider } from './services/portfolio/portfolioApiContext.tsx'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
